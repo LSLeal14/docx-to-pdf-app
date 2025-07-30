@@ -1,85 +1,44 @@
 import streamlit as st
-from docx import Document
-import tempfile
+import firebase_admin
+from firebase_admin import credentials, firestore
 import os
-import re
-import subprocess
+from dotenv import load_dotenv
 
-# Extrai campos {{campo}} do docx (inclusive em tabelas)
-def extrair_campos(doc):
-    campos = set()
-
-    for p in doc.paragraphs:
-        campos.update(re.findall(r"\{\{(.*?)\}\}", p.text))
-
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    campos.update(re.findall(r"\{\{(.*?)\}\}", p.text))
-
-    return list(campos)
-
-# Substitui os campos pelos valores preenchidos
-def preencher_campos(doc, dados):
-    for p in doc.paragraphs:
-        for k, v in dados.items():
-            p.text = p.text.replace(f"{{{{{k}}}}}", v)
-
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    for k, v in dados.items():
-                        p.text = p.text.replace(f"{{{{{k}}}}}", v)
-
-# Converte para PDF usando o LibreOffice headless
-def converter_para_pdf(caminho_docx):
-    saida_dir = tempfile.mkdtemp()
-    comando = [
-        "soffice",
-        "--headless",
-        "--convert-to", "pdf",
-        "--outdir", saida_dir,
-        caminho_docx
-    ]
-    subprocess.run(comando, check=True)
-    nome_pdf = os.path.splitext(os.path.basename(caminho_docx))[0] + ".pdf"
-    return os.path.join(saida_dir, nome_pdf)\
 
 def main():
-    # Interface Streamlit
-    st.title("Gerador de PDF a partir de documento .docx")
+    st.title("Cadastro de Projeto")
 
-    arquivo = st.file_uploader("Envie o .docx com campos {{campo}}", type="docx")
+    load_dotenv()
 
-    if arquivo:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-            tmp.write(arquivo.read())
-            caminho_docx = tmp.name
+    FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
 
-        doc = Document(caminho_docx)
-        campos = extrair_campos(doc)
+    # Inicializar Firebase (executa só uma vez)
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        firebase_admin.initialize_app(cred)
 
-        if campos:
-            st.success("Campos encontrados:")
-            dados = {}
-            for campo in campos:
-                dados[campo] = st.text_input(campo)
+    db = firestore.client()
 
-            if st.button("Gerar PDF"):
-                preencher_campos(doc, dados)
+    with st.form("formulario"):
+        n_contrato       = st.text_input("Contrato n°:")
+        periodo_vigencia = st.text_input("Período da Vigência:")
+        n_os             = st.text_input("N° da OS/OFB/NE:")
+        objeto           = st.text_input("Objeto:")
+        valor_bens_receb = st.text_input("Valor dos Bens/Serviços Recebidos:")
+        contratante      = st.text_input("Contratante:")
+        contratada       = st.text_input("Contratada:")
+        
+        enviar = st.form_submit_button("Enviar")
 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as docx_preenchido:
-                    doc.save(docx_preenchido.name)
-                    pdf_path = converter_para_pdf(docx_preenchido.name)
-
-                    with open(pdf_path, "rb") as pdf_file:
-                        st.download_button(
-                            label="📥 Baixar PDF",
-                            data=pdf_file,
-                            file_name="documento_preenchido.pdf",
-                            mime="application/pdf"
-                        )
-        else:
-            st.warning("Nenhum campo {{campo}} encontrado.")
+    if enviar:
+        dados = {
+            "n_contrato": n_contrato,
+            "periodo_vigencia": periodo_vigencia,
+            "n_os": n_os,
+            "objeto": objeto,
+            "valor_bens_receb": valor_bens_receb,
+            "contratante": contratante,
+            "contratada": contratada
+        }
+        db.collection("projeto").add(dados)
+        st.success("Dados enviados ao Firebase com sucesso!")
