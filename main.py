@@ -1,6 +1,7 @@
 import streamlit as st
 import home
 import cadastro_proj
+import consultar_proj
 import atualizar_proj
 
 # Inicializa o estado
@@ -14,6 +15,8 @@ with st.sidebar:
         st.session_state.page = "home"
     if st.button("Cadastro de Projeto", type="tertiary"):
         st.session_state.page = "cadastro"
+    if st.button("Consulta de Projeto", type="tertiary"):
+        st.session_state.page = "consultar"
     if st.button("Atualização de Projeto", type="tertiary"):
         st.session_state.page = "atualizar"
 
@@ -22,6 +25,8 @@ if st.session_state.page == "home":
     home.main()
 elif st.session_state.page == "cadastro":
     cadastro_proj.main()
+elif st.session_state.page == "consultar":
+    consultar_proj.main()
 elif st.session_state.page == "atualizar":
     atualizar_proj.main()
 
