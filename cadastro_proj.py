@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 
 
 def main():
+
+    st.set_page_config(layout="wide")
+
     st.title("Cadastro de Projeto")
 
     load_dotenv()
@@ -41,4 +44,4 @@ def main():
             "contratada": contratada
         }
         db.collection("projeto").add(dados)
-        st.success("Dados enviados ao Firebase com sucesso!")
+        st.success("Dados salvos!")
