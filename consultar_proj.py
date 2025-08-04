@@ -7,8 +7,9 @@ import pandas as pd
 def main():
 
     st.set_page_config(layout="wide")
-    
+
     st.title("Consulta de Projeto")
+
     st.write("Consulte os dados do projeto aqui...")
 
     FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
@@ -20,33 +21,46 @@ def main():
 
     db = firestore.client()
 
-    # Consultar dados da coleção 'projetos'
+    # Campos disponíveis para busca
+    campos = {
+        "Contrato n°": "n_contrato",
+        "Período de Vigência": "periodo_vigencia",
+        "N° da OS/OFB/NE": "n_os",
+        "Objeto": "objeto",
+        "Valor dos Bens/Serviços Recebidos": "valor_bens_receb",
+        "Contratante": "contratante",
+        "Contratada": "contratada"
+    }
+
+    # Interface de filtro
+    campo_escolhido = st.selectbox("Selecione o campo para buscar:", list(campos.keys()))
+    termo_busca = st.text_input("Digite o termo para busca:")
+
+    # Consulta no Firebase
     projetos_ref = db.collection('projeto')
     docs = projetos_ref.stream()
 
-    st.subheader("Projetos cadastrados:")
+    st.subheader("Projetos encontrados:")
+
+    campo_firebase = campos[campo_escolhido]
+    resultados = []
+
     for doc in docs:
         data = doc.to_dict()
-        dados = {
-            "Item": [
-                "Contrato n°:",
-                "Período de Vigência:",
-                "N° da OS/OFB/NE:",
-                "Objeto:",
-                "Valor dos Bens/Serviços Recebidos",
-                "Contratente",
-                "Contratada"
-            ],
-            "Info": [
-                data.get('n_contrato'),
-                data.get('periodo_vigencia'),
-                data.get('n_os'),
-                data.get('objeto'),
-                data.get('valor_bens_receb'),
-                data.get('contratante'),
-                data.get('contratada')
-            ]
-        }
+        valor_campo = str(data.get(campo_firebase, "")).lower()
+        if termo_busca.lower() in valor_campo:
+            resultados.append(data)
 
-        df = pd.DataFrame(dados)
-        st.dataframe(df)
+    if resultados:
+        for data in resultados:
+            dados = {
+                "Item": list(campos.keys()),
+                "Info": [data.get(campos[campo], "") for campo in campos]
+            }
+            df = pd.DataFrame(dados)
+            st.dataframe(df, use_container_width=True)
+    else:
+        st.info("Nenhum projeto encontrado com o critério informado.")
+
+if __name__ == "__main__":
+    main()

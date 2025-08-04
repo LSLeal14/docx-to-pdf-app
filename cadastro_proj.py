@@ -3,7 +3,12 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 from dotenv import load_dotenv
+import datetime
 
+data_atual = datetime.datetime.now()
+ano_seguinte = data_atual.year + 1
+jan_1 = datetime.date(2000, 1, 1)
+dez_31 = datetime.date(2100, 12, 31)
 
 def main():
 
@@ -24,10 +29,16 @@ def main():
 
     with st.form("formulario"):
         n_contrato       = st.text_input("Contrato n°:")
-        periodo_vigencia = st.text_input("Período da Vigência:")
+        periodo_vigencia = st.date_input(
+                            "Periodo de Vigência:",
+                            (data_atual, datetime.date(ano_seguinte, 1, 1)),
+                            jan_1,
+                            dez_31,
+                            format="DD.MM.YYYY",
+                            )
         n_os             = st.text_input("N° da OS/OFB/NE:")
         objeto           = st.text_input("Objeto:")
-        valor_bens_receb = st.text_input("Valor dos Bens/Serviços Recebidos:")
+        valor_bens_receb = st.text_input("Valor dos Bens/Serviços Recebidos:", placeholder="R$ 12.345,67 (doze mil, trezentos e quarenta e cinco reais e secenta e sete centavos)")
         contratante      = st.text_input("Contratante:")
         contratada       = st.text_input("Contratada:")
         
