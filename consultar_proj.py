@@ -23,7 +23,7 @@ def main():
 
     # Campos disponíveis para busca
     campos = {
-        "Contrato n°": "n_contrato",
+        "N° do Contrato": "n_contrato",
         "Período de Vigência": "periodo_vigencia",
         "N° da OS/OFB/NE": "n_os",
         "Objeto": "objeto",
@@ -36,8 +36,8 @@ def main():
     campo_escolhido = st.selectbox("Selecione o campo para buscar:", list(campos.keys()))
     termo_busca = st.text_input("Digite o termo para busca:")
 
-    # Consulta no Firebase
-    projetos_ref = db.collection('projeto')
+    # Consulta no Firebase (coleção 'projetos')
+    projetos_ref = db.collection("projetos")
     docs = projetos_ref.stream()
 
     st.subheader("Projetos encontrados:")
@@ -47,18 +47,34 @@ def main():
 
     for doc in docs:
         data = doc.to_dict()
+        doc_id = doc.id
         valor_campo = str(data.get(campo_firebase, "")).lower()
         if termo_busca.lower() in valor_campo:
-            resultados.append(data)
+            resultados.append((doc_id, data))
 
     if resultados:
-        for data in resultados:
+        for doc_id, data in resultados:
             dados = {
                 "Item": list(campos.keys()),
                 "Info": [data.get(campos[campo], "") for campo in campos]
             }
-            df = pd.DataFrame(dados)
-            st.dataframe(df, use_container_width=True)
+            df_info = pd.DataFrame(dados)
+            st.dataframe(df_info, use_container_width=True)
+
+            # Botão para expandir a tabela
+            with st.expander(f"Expandir andamento do projeto"):
+                try:
+                    linhas = data.get("linhas", [])
+                    colunas = data.get("colunas", [])
+                    tabela_dict = data.get("tabela", {})
+
+                    df_tabela = pd.DataFrame.from_dict(tabela_dict, orient="columns")
+                    df_tabela = df_tabela.reindex(columns=colunas)
+                    df_tabela.index.name = "Item"
+
+                    st.dataframe(df_tabela, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Erro ao carregar tabela: {e}")
     else:
         st.info("Nenhum projeto encontrado com o critério informado.")
 
