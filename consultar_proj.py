@@ -8,7 +8,7 @@ def main():
 
     st.set_page_config(layout="wide")
 
-    st.title("Consulta de Projeto")
+    st.title("Consulta de Projetos")
 
     st.write("Consulte os dados do projeto aqui...")
 
