@@ -68,39 +68,40 @@ def converter_para_pdf(caminho_docx):
 
     return caminho_pdf
 
-st.title("📄 Gerar PDF e salvar na pasta Downloads")
+def main():
+    st.title("📄 Gerar PDF e salvar na pasta Downloads")
 
-caminho_fixo = "template/Template_ata_ebserh.docx"
+    caminho_fixo = "template/Template_ata_ebserh.docx"
 
-if not os.path.exists(caminho_fixo):
-    st.error(f"Arquivo fixo não encontrado: {caminho_fixo}")
-else:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-        shutil.copyfile(caminho_fixo, tmp.name)
-        caminho_docx_temp = tmp.name
-
-    doc = Document(caminho_docx_temp)
-    campos = extrair_campos(doc)
-
-    if campos:
-        st.success("Campos encontrados:")
-        dados = {}
-        for campo in campos:
-            dados[campo] = st.text_input(campo)
-
-        if st.button("Gerar PDF"):
-            preencher_campos(doc, dados)
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as docx_preenchido:
-                doc.save(docx_preenchido.name)
-                pdf_path = converter_para_pdf(docx_preenchido.name)
-
-                with open(pdf_path, "rb") as pdf_file:
-                    st.download_button(
-                        label="📥 Baixar PDF",
-                        data=pdf_file,
-                        file_name="documento_preenchido.pdf",
-                        mime="application/pdf"
-                    )
+    if not os.path.exists(caminho_fixo):
+        st.error(f"Arquivo fixo não encontrado: {caminho_fixo}")
     else:
-        st.warning("Nenhum campo {{campo}} encontrado.")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+            shutil.copyfile(caminho_fixo, tmp.name)
+            caminho_docx_temp = tmp.name
+
+        doc = Document(caminho_docx_temp)
+        campos = extrair_campos(doc)
+
+        if campos:
+            st.success("Campos encontrados:")
+            dados = {}
+            for campo in campos:
+                dados[campo] = st.text_input(campo)
+
+            if st.button("Gerar PDF"):
+                preencher_campos(doc, dados)
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as docx_preenchido:
+                    doc.save(docx_preenchido.name)
+                    pdf_path = converter_para_pdf(docx_preenchido.name)
+
+                    with open(pdf_path, "rb") as pdf_file:
+                        st.download_button(
+                            label="📥 Baixar PDF",
+                            data=pdf_file,
+                            file_name="documento_preenchido.pdf",
+                            mime="application/pdf"
+                        )
+        else:
+            st.warning("Nenhum campo {{campo}} encontrado.")
