@@ -4,6 +4,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 import pandas as pd
+from gera_pdf import extrair_campos, preencher_campos, converter_para_pdf
 
 # Firebase init
 @st.cache_resource
@@ -16,6 +17,9 @@ def init_firebase():
     return firestore.client()
 
 db = init_firebase()
+
+def gen_pdf():
+    return 0
 
 def main():
     st.set_page_config(layout="wide")
