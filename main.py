@@ -22,8 +22,7 @@ with st.sidebar:
         st.session_state.page = "consultar"
     if st.button("Atualização de Projeto", type="tertiary"):
         st.session_state.page = "atualizar"
-    if st.button("Gera pdf", type="tertiary"):
-        st.session_state.page = "gera"
+
 
 # Mostra a página correspondente
 if st.session_state.page == "home":
@@ -34,5 +33,3 @@ elif st.session_state.page == "consultar":
     consultar_proj.main()
 elif st.session_state.page == "atualizar":
     atualizar_proj.main()
-elif st.session_state.page == "gera":
-    gera_pdf.main()
