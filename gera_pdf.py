@@ -47,38 +47,39 @@ def converter_para_pdf(caminho_docx):
     nome_pdf = os.path.splitext(os.path.basename(caminho_docx))[0] + ".pdf"
     return os.path.join(saida_dir, nome_pdf)
 
-# Interface Streamlit
-st.title("Gerar PDF fiel ao Word com Docker + LibreOffice")
+def main():
+    # Interface Streamlit
+    st.title("Gerar PDF fiel ao Word com Docker + LibreOffice")
 
-arquivo = st.file_uploader("Envie o .docx com campos {{campo}}", type="docx")
+    arquivo = st.file_uploader("Envie o .docx com campos {{campo}}", type="docx")
 
-if arquivo:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-        tmp.write(arquivo.read())
-        caminho_docx = tmp.name
+    if arquivo:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+            tmp.write(arquivo.read())
+            caminho_docx = tmp.name
 
-    doc = Document(caminho_docx)
-    campos = extrair_campos(doc)
+        doc = Document(caminho_docx)
+        campos = extrair_campos(doc)
 
-    if campos:
-        st.success("Campos encontrados:")
-        dados = {}
-        for campo in campos:
-            dados[campo] = st.text_input(campo)
+        if campos:
+            st.success("Campos encontrados:")
+            dados = {}
+            for campo in campos:
+                dados[campo] = st.text_input(campo)
 
-        if st.button("Gerar PDF"):
-            preencher_campos(doc, dados)
+            if st.button("Gerar PDF"):
+                preencher_campos(doc, dados)
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as docx_preenchido:
-                doc.save(docx_preenchido.name)
-                pdf_path = converter_para_pdf(docx_preenchido.name)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as docx_preenchido:
+                    doc.save(docx_preenchido.name)
+                    pdf_path = converter_para_pdf(docx_preenchido.name)
 
-                with open(pdf_path, "rb") as pdf_file:
-                    st.download_button(
-                        label="📥 Baixar PDF",
-                        data=pdf_file,
-                        file_name="documento_preenchido.pdf",
-                        mime="application/pdf"
-                    )
-    else:
-        st.warning("Nenhum campo {{campo}} encontrado.")
+                    with open(pdf_path, "rb") as pdf_file:
+                        st.download_button(
+                            label="📥 Baixar PDF",
+                            data=pdf_file,
+                            file_name="documento_preenchido.pdf",
+                            mime="application/pdf"
+                        )
+        else:
+            st.warning("Nenhum campo {{campo}} encontrado.")
