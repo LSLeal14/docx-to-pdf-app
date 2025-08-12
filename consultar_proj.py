@@ -97,14 +97,13 @@ def main():
 
     if resultados:
         for doc_id, data in resultados:
-            st.write(f"**Projeto ID:** {doc_id}")
             df_info = pd.DataFrame({
                 "Item": list(campos.keys()),
                 "Info": [data.get(campos[campo], "") for campo in campos]
             })
             st.dataframe(df_info, use_container_width=True)
 
-            if st.button(f"Gerar PDF - {doc_id}"):
+            if st.button(f"Gerar PDF"):
                 try:
                     # Copiar template fixo para temporário
                     caminho_fixo = "template/Template_ata_ebserh.docx"
