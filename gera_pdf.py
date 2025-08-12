@@ -48,7 +48,7 @@ def converter_para_pdf(caminho_docx):
     return os.path.join(saida_dir, nome_pdf)
 
 # Interface Streamlit
-st.title("📄 Gerar PDF fiel ao Word com Docker + LibreOffice")
+st.title("Gerar PDF fiel ao Word com Docker + LibreOffice")
 
 arquivo = st.file_uploader("Envie o .docx com campos {{campo}}", type="docx")
 

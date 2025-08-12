@@ -34,5 +34,5 @@ elif st.session_state.page == "consultar":
     consultar_proj.main()
 elif st.session_state.page == "atualizar":
     atualizar_proj.main()
-elif st.session_state.page == "atualizar":
+elif st.session_state.page == "gera":
     gera_pdf.main()
