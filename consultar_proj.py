@@ -3,6 +3,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
+from gera_pdf import extrair_campos, preencher_campos, converter_para_pdf
 
 def main():
 
