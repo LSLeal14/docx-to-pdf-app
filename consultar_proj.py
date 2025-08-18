@@ -30,58 +30,108 @@ def extrair_campos(doc):
 def preencher_campos(doc, dados):
     """
     Substitui placeholders {{chave}} no documento por:
-      - Texto (str, int, float)
-      - Imagem (str terminando em .png/.jpg/.jpeg)
-      - Tabela (lista de dicionários)
+      - Texto (str/int/float)
+      - Imagem (caminho .png/.jpg/.jpeg)
+      - Tabela (list[dict] ou pandas.DataFrame)
     """
-    def substituir_paragrafo(p, chave, valor):
-        placeholder = f"{{{{{chave}}}}}"
-        if placeholder not in p.text:
+    def is_image(v):
+        return isinstance(v, (str, Path)) and str(v).lower().endswith((".png", ".jpg", ".jpeg"))
+
+    def is_table(v):
+        if isinstance(v, pd.DataFrame):
+            return True
+        if isinstance(v, list) and v and all(isinstance(r, dict) for r in v):
+            return True
+        return False
+
+    def normalize_table(v):
+        if isinstance(v, pd.DataFrame):
+            return v.to_dict(orient="records")
+        return v
+
+    def replace_text_in_paragraph(p, mapping_text):
+        """Substitui placeholders de texto mesmo quando quebrados em vários runs.
+        (isso recria o conteúdo do parágrafo, perdendo formatação parcial)"""
+        original = p.text
+        new_text = original
+        for k, v in mapping_text.items():
+            new_text = new_text.replace(f"{{{{{k}}}}}", str(v))
+        if new_text != original:
+            for r in p.runs:
+                r.text = ""
+            if p.runs:
+                p.runs[0].text = new_text
+            else:
+                p.add_run(new_text)
+
+    def paragraph_only_placeholder(p, placeholder):
+        return p.text.strip() == placeholder
+
+    def insert_image_at_paragraph(p, img_path):
+        for r in p.runs:
+            r.text = ""
+        p.add_run().add_picture(str(img_path), width=Inches(2))
+
+    def insert_table_after_paragraph(doc, p, records):
+        if not records:
             return
+        cols = list(records[0].keys())
+        table = doc.add_table(rows=1 + len(records), cols=len(cols))
+        # Cabeçalho
+        for j, c in enumerate(cols):
+            table.cell(0, j).text = str(c)
+        # Linhas
+        for i, row in enumerate(records, start=1):
+            for j, c in enumerate(cols):
+                table.cell(i, j).text = "" if row.get(c) is None else str(row.get(c))
+        # Insere a tabela logo depois do parágrafo
+        p._element.addnext(table._element)
 
-        for run in p.runs:
-            if placeholder in run.text:
-                # Remove placeholder
-                run.text = run.text.replace(placeholder, "")
+    # Separa os tipos de dados
+    dados_texto, dados_imagem, dados_tabela = {}, {}, {}
+    for k, v in dados.items():
+        if is_image(v):
+            dados_imagem[k] = v
+        elif is_table(v):
+            dados_tabela[k] = normalize_table(v)
+        else:
+            dados_texto[k] = v
 
-                # Se for imagem
-                if isinstance(valor, str) and valor.lower().endswith((".png", ".jpg", ".jpeg")):
-                    p.add_run().add_picture(valor, width=Inches(2))
-
-                # Se for tabela
-                elif isinstance(valor, list) and all(isinstance(r, dict) for r in valor):
-                    rows, cols = len(valor), len(valor[0])
-                    tabela = doc.add_table(rows=rows+1, cols=cols)
-
-                    # Cabeçalho
-                    hdr_cells = tabela.rows[0].cells
-                    for j, key in enumerate(valor[0].keys()):
-                        hdr_cells[j].text = str(key)
-
-                    # Linhas
-                    for i, row_data in enumerate(valor, 1):
-                        for j, key in enumerate(row_data.keys()):
-                            tabela.cell(i, j).text = str(row_data[key])
-
-                    # Inserir a tabela logo após o parágrafo
-                    p._element.addnext(tabela._element)
-
-                # Texto normal
-                else:
-                    run.text += str(valor)
-
-    # Percorre parágrafos
+    # --- Processa imagens e tabelas ---
     for p in doc.paragraphs:
-        for k, v in dados.items():
-            substituir_paragrafo(p, k, v)
+        for k, img in dados_imagem.items():
+            ph = f"{{{{{k}}}}}"
+            if ph in p.text:
+                if paragraph_only_placeholder(p, ph):
+                    insert_image_at_paragraph(p, img)
+                else:
+                    replace_text_in_paragraph(p, {k: ""})
+                    p.add_run().add_picture(str(img), width=Inches(2))
+        for k, rows in dados_tabela.items():
+            ph = f"{{{{{k}}}}}"
+            if ph in p.text:
+                replace_text_in_paragraph(p, {k: ""})
+                insert_table_after_paragraph(doc, p, rows)
 
-    # Percorre células de tabelas do documento
+    # --- Processa texto ---
+    for p in doc.paragraphs:
+        replace_text_in_paragraph(p, dados_texto)
+
+    # --- Processa também células de tabelas já existentes ---
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
+                for k, img in dados_imagem.items():
+                    ph = f"{{{{{k}}}}}"
+                    for p in cell.paragraphs:
+                        if ph in p.text:
+                            if paragraph_only_placeholder(p, ph):
+                                insert_image_at_paragraph(p, img)
+                            else:
+                                replace_text_in_paragraph(p, {k: ""})
+                                p.add_run().add_picture(str(img), width=Inches(2))
                 for p in cell.paragraphs:
-                    for k, v in dados.items():
-                        substituir_paragrafo(p, k, v)
+                    replace_text_in_paragraph(p, dados_texto)
 
 def converter_para_pdf(caminho_docx):
     downloads_dir = get_downloads_folder()
@@ -145,7 +195,7 @@ def main():
         for doc_id, data in resultados:
             df_info = pd.DataFrame({
                 "Item": list(campos.keys()),
-                "Info": [str(data.get(campos[campo], "")) for campo in campos]
+            "Info": [str(data.get(campos[campo], "")) for campo in campos]
             })
 
             st.dataframe(df_info, use_container_width=True)
