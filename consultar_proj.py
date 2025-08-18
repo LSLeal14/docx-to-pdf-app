@@ -9,6 +9,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
 from docx import Document
+from docx.shared import Inches
 
 # ==== Funções auxiliares ====
 def get_downloads_folder():
@@ -27,15 +28,60 @@ def extrair_campos(doc):
     return list(campos)
 
 def preencher_campos(doc, dados):
+    """
+    Substitui placeholders {{chave}} no documento por:
+      - Texto (str, int, float)
+      - Imagem (str terminando em .png/.jpg/.jpeg)
+      - Tabela (lista de dicionários)
+    """
+    def substituir_paragrafo(p, chave, valor):
+        placeholder = f"{{{{{chave}}}}}"
+        if placeholder not in p.text:
+            return
+
+        for run in p.runs:
+            if placeholder in run.text:
+                # Remove placeholder
+                run.text = run.text.replace(placeholder, "")
+
+                # Se for imagem
+                if isinstance(valor, str) and valor.lower().endswith((".png", ".jpg", ".jpeg")):
+                    p.add_run().add_picture(valor, width=Inches(2))
+
+                # Se for tabela
+                elif isinstance(valor, list) and all(isinstance(r, dict) for r in valor):
+                    rows, cols = len(valor), len(valor[0])
+                    tabela = doc.add_table(rows=rows+1, cols=cols)
+
+                    # Cabeçalho
+                    hdr_cells = tabela.rows[0].cells
+                    for j, key in enumerate(valor[0].keys()):
+                        hdr_cells[j].text = str(key)
+
+                    # Linhas
+                    for i, row_data in enumerate(valor, 1):
+                        for j, key in enumerate(row_data.keys()):
+                            tabela.cell(i, j).text = str(row_data[key])
+
+                    # Inserir a tabela logo após o parágrafo
+                    p._element.addnext(tabela._element)
+
+                # Texto normal
+                else:
+                    run.text += str(valor)
+
+    # Percorre parágrafos
     for p in doc.paragraphs:
         for k, v in dados.items():
-            p.text = p.text.replace(f"{{{{{k}}}}}", str(v))
+            substituir_paragrafo(p, k, v)
+
+    # Percorre células de tabelas do documento
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for p in cell.paragraphs:
                     for k, v in dados.items():
-                        p.text = p.text.replace(f"{{{{{k}}}}}", str(v))
+                        substituir_paragrafo(p, k, v)
 
 def converter_para_pdf(caminho_docx):
     downloads_dir = get_downloads_folder()
@@ -99,11 +145,12 @@ def main():
         for doc_id, data in resultados:
             df_info = pd.DataFrame({
                 "Item": list(campos.keys()),
-                "Info": [data.get(campos[campo], "") for campo in campos]
+                "Info": [str(data.get(campos[campo], "")) for campo in campos]
             })
+
             st.dataframe(df_info, use_container_width=True)
 
-            if st.button(f"Gerar PDF"):
+            if st.button(f"Gerar PDF", key=f"gerar_pdf_{doc_id}"):
                 try:
                     # Copiar template fixo para temporário
                     caminho_fixo = "template/Template_ata_ebserh.docx"
@@ -125,7 +172,7 @@ def main():
 
                     with open(pdf_path, "rb") as pdf_file:
                         st.download_button(
-                            label="📥 Baixar PDF",
+                            label="Baixar PDF",
                             data=pdf_file,
                             file_name=f"projeto_{doc_id}.pdf",
                             mime="application/pdf"
