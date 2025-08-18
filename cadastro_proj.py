@@ -74,7 +74,7 @@ def main():
             "prazo_meses": prazo_meses,
             "linhas": nomes_linhas,
             "colunas": colunas,
-            "table": df.fillna("").to_dict()
+            "tabela": df.fillna("").to_dict()
         }
 
         try:
