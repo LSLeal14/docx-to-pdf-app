@@ -14,7 +14,7 @@ dez_31 = datetime.date(2100, 12, 31)
 
 def main():
     st.set_page_config(layout="wide")
-    st.title("Cadastro de Projeto com Tabela Interativa")
+    st.title("Cadastro de Projeto")
 
     load_dotenv()
 
@@ -64,7 +64,7 @@ def main():
         
         objeto = st.text_area("Objeto do Contrato:")
 
-        st.header("3. Tabela de Medições e Cronograma")
+        st.header("3. Tabela de Planejamento")
         st.info("Preencha os itens e valores diretamente na tabela abaixo.")
 
         colunas_meses = [f"Mês {i+1}" for i in range(prazo_meses)]
