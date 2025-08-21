@@ -105,7 +105,7 @@ def main():
                 "prazo_meses": prazo_meses,
                 # <<< O campo 'tabela' agora tem o nome que seu outro script espera
                 # e o formato correto!
-                "tabela_faturamento": tabela_para_salvar 
+                "table": tabela_para_salvar 
             }
 
             try:
