@@ -32,7 +32,7 @@ def preencher_campos(doc, dados):
     Substitui placeholders {{chave}} no documento por:
       - Texto (str/int/float)
       - Imagem (caminho .png/.jpg/.jpeg)
-      - Tabela (list[dict] ou pandas.DataFrame)
+      - Tabela (list[dict] ou pandas.DataFrame) com grid.
     """
     def is_image(v):
         return isinstance(v, (str, Path)) and str(v).lower().endswith((".png", ".jpg", ".jpeg"))
@@ -50,8 +50,6 @@ def preencher_campos(doc, dados):
         return v
 
     def replace_text_in_paragraph(p, mapping_text):
-        """Substitui placeholders de texto mesmo quando quebrados em vários runs.
-        (isso recria o conteúdo do parágrafo, perdendo formatação parcial)"""
         original = p.text
         new_text = original
         for k, v in mapping_text.items():
@@ -73,18 +71,32 @@ def preencher_campos(doc, dados):
         p.add_run().add_picture(str(img_path), width=Inches(2))
 
     def insert_table_after_paragraph(doc, p, records):
+        """Cria uma tabela com grid e cabeçalho em negrito."""
         if not records:
             return
         cols = list(records[0].keys())
-        table = doc.add_table(rows=1 + len(records), cols=len(cols))
-        # Cabeçalho
+        
+        # Adiciona a tabela com o estilo 'Table Grid'
+        table = doc.add_table(rows=1 + len(records), cols=len(cols), style='Table Grid')
+        
+        # Ajuste automático da largura das colunas (opcional, mas recomendado)
+        table.autofit = True
+
+        # Preenche o cabeçalho e aplica negrito
+        hdr_cells = table.rows[0].cells
         for j, c in enumerate(cols):
-            table.cell(0, j).text = str(c)
-        # Linhas
-        for i, row in enumerate(records, start=1):
+            run = hdr_cells[j].paragraphs[0].add_run(str(c))
+            run.bold = True
+
+        # Preenche as linhas de dados
+        for i, row_data in enumerate(records, start=1):
+            row_cells = table.rows[i].cells
             for j, c in enumerate(cols):
-                table.cell(i, j).text = "" if row.get(c) is None else str(row.get(c))
-        # Insere a tabela logo depois do parágrafo
+                # Garante que o valor seja uma string antes de inserir
+                cell_value = row_data.get(c)
+                row_cells[j].text = "" if cell_value is None else str(cell_value)
+                
+        # Insere a tabela logo depois do parágrafo do placeholder
         p._element.addnext(table._element)
 
     # Separa os tipos de dados
