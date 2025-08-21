@@ -50,12 +50,12 @@ def preencher_campos(doc, dados):
         return v
 
     def replace_text_in_paragraph(p, mapping_text):
+        """Substitui placeholders de texto mesmo quando quebrados em vários runs.
+        (isso recria o conteúdo do parágrafo, perdendo formatação parcial)"""
         original = p.text
         new_text = original
-        # Apenas substitui se o valor não for uma lista/dicionário para evitar erros
         for k, v in mapping_text.items():
-            if not isinstance(v, (list, dict)):
-                 new_text = new_text.replace(f"{{{{{k}}}}}", str(v))
+            new_text = new_text.replace(f"{{{{{k}}}}}", str(v))
         if new_text != original:
             for r in p.runs:
                 r.text = ""
@@ -72,42 +72,20 @@ def preencher_campos(doc, dados):
             r.text = ""
         p.add_run().add_picture(str(img_path), width=Inches(2))
 
-    # <<< MUDANÇA 1: A FUNÇÃO DA TABELA AGORA RECEBE OS DADOS COMPLETOS >>>
-    # Isso é necessário para que ela possa ler o campo 'prazo_meses'
-    def insert_table_after_paragraph(doc, p, records, dados_completos):
+    def insert_table_after_paragraph(doc, p, records):
         if not records:
             return
-
-        # <<< MUDANÇA 2: ORDENAÇÃO EXPLÍCITA DAS COLUNAS >>>
-        # Usa o campo 'prazo_meses' para garantir a ordem correta das colunas
-        prazo = dados_completos.get('prazo_meses')
-        if prazo:
-            cols_ordenadas = ['Item'] + [f"Mês {i+1}" for i in range(int(prazo))]
-        else:
-            # Se 'prazo_meses' não existir, usa a ordem padrão (pode não ser a correta)
-            cols_ordenadas = list(records[0].keys())
-
-        table = doc.add_table(rows=1, cols=len(cols_ordenadas))
-        
-        # <<< MUDANÇA 3: ADICIONA AS BORDAS (GRID) À TABELA >>>
-        table.style = 'Table Grid'
-        
+        cols = list(records[0].keys())
+        table = doc.add_table(rows=1 + len(records), cols=len(cols))
         # Cabeçalho
-        for j, col_name in enumerate(cols_ordenadas):
-            table.cell(0, j).text = str(col_name)
-
+        for j, c in enumerate(cols):
+            table.cell(0, j).text = str(c)
         # Linhas
-        for row_data in records:
-            row = table.add_row()
-            for j, col_name in enumerate(cols_ordenadas):
-                # Usa .get() para buscar o valor com segurança
-                cell_value = row_data.get(col_name, "") 
-                row.cells[j].text = str(cell_value)
-        
-        # Remove o parágrafo do placeholder e insere a tabela
-        p.clear() 
-        p._element.addprevious(table._element)
-
+        for i, row in enumerate(records, start=1):
+            for j, c in enumerate(cols):
+                table.cell(i, j).text = "" if row.get(c) is None else str(row.get(c))
+        # Insere a tabela logo depois do parágrafo
+        p._element.addnext(table._element)
 
     # Separa os tipos de dados
     dados_texto, dados_imagem, dados_tabela = {}, {}, {}
@@ -115,42 +93,45 @@ def preencher_campos(doc, dados):
         if is_image(v):
             dados_imagem[k] = v
         elif is_table(v):
-            # <<< MUDANÇA 4: ATRIBUINDO O NOME CORRETO DA TABELA >>>
-            # Garante que a tabela do Firebase seja mapeada para o placeholder correto
-            if 'tabela_faturamento' in dados:
-                 dados_tabela['tabela_faturamento'] = normalize_table(dados['tabela_faturamento'])
+            dados_tabela[k] = normalize_table(v)
         else:
             dados_texto[k] = v
 
     # --- Processa imagens e tabelas ---
-    # É melhor iterar por uma cópia dos parágrafos, pois vamos modificar o documento
-    for p in list(doc.paragraphs):
-        # Itera sobre os placeholders de tabela primeiro
-        for k, rows in dados_tabela.items():
-            ph = f"{{{{{k}}}}}"
-            if paragraph_only_placeholder(p, ph):
-                # <<< MUDANÇA 5: CHAMA A FUNÇÃO MODIFICADA PASSANDO OS DADOS COMPLETOS >>>
-                insert_table_after_paragraph(doc, p, rows, dados)
-        
-        # Processa placeholders de imagem
+    for p in doc.paragraphs:
         for k, img in dados_imagem.items():
             ph = f"{{{{{k}}}}}"
-            if paragraph_only_placeholder(p, ph):
-                insert_image_at_paragraph(p, img)
-            elif ph in p.text: # Lida com imagens no meio do texto
+            if ph in p.text:
+                if paragraph_only_placeholder(p, ph):
+                    insert_image_at_paragraph(p, img)
+                else:
+                    replace_text_in_paragraph(p, {k: ""})
+                    p.add_run().add_picture(str(img), width=Inches(2))
+        for k, rows in dados_tabela.items():
+            ph = f"{{{{{k}}}}}"
+            if ph in p.text:
                 replace_text_in_paragraph(p, {k: ""})
-                p.add_run().add_picture(str(img), width=Inches(2))
+                insert_table_after_paragraph(doc, p, rows)
 
-    # --- Processa texto em todo o documento (parágrafos e tabelas existentes) ---
-    all_paragraphs = list(doc.paragraphs)
+    # --- Processa texto ---
+    for p in doc.paragraphs:
+        replace_text_in_paragraph(p, dados_texto)
+
+    # --- Processa também células de tabelas já existentes ---
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                all_paragraphs.extend(cell.paragraphs)
-
-    for p in all_paragraphs:
-        replace_text_in_paragraph(p, dados_texto)
-
+                for k, img in dados_imagem.items():
+                    ph = f"{{{{{k}}}}}"
+                    for p in cell.paragraphs:
+                        if ph in p.text:
+                            if paragraph_only_placeholder(p, ph):
+                                insert_image_at_paragraph(p, img)
+                            else:
+                                replace_text_in_paragraph(p, {k: ""})
+                                p.add_run().add_picture(str(img), width=Inches(2))
+                for p in cell.paragraphs:
+                    replace_text_in_paragraph(p, dados_texto)
 
 def converter_para_pdf(caminho_docx):
     downloads_dir = get_downloads_folder()
@@ -187,61 +168,71 @@ def main():
 
     campos = {
         "N° do Contrato": "n_contrato",
+        "Período de Vigência": "periodo_vigencia",
+        "N° da OS/OFB/NE": "n_os",
         "Objeto": "objeto",
+        "Valor dos Bens/Serviços Recebidos": "valor_bens_receb",
+        "Contratante": "contratante",
+        "Contratada": "contratada"
     }
 
     campo_escolhido = st.selectbox("Selecione o campo para buscar:", list(campos.keys()))
     termo_busca = st.text_input("Digite o termo para busca:")
 
-    if st.button("Buscar Projetos"):
-        projetos_ref = db.collection("projetos")
-        campo_firebase = campos[campo_escolhido]
-        
-        # Query mais eficiente no Firebase
-        docs = projetos_ref.where(campo_firebase, '>=', termo_busca).where(campo_firebase, '<=', termo_busca + '\uf8ff').stream()
-        
-        resultados = [(doc.id, doc.to_dict()) for doc in docs]
+    projetos_ref = db.collection("projetos")
+    docs = projetos_ref.stream()
 
-        st.subheader("Projetos encontrados:")
-        if resultados:
-            for doc_id, data in resultados:
-                st.markdown(f"---")
-                st.write(f"**ID:** {doc_id} | **Objeto:** {data.get('objeto', 'N/A')}")
+    st.subheader("Projetos encontrados:")
+    campo_firebase = campos[campo_escolhido]
+    resultados = []
 
-                if st.button(f"Gerar PDF para {data.get('n_contrato', doc_id)}", key=f"gerar_pdf_{doc_id}"):
-                    with st.spinner("Gerando documento..."):
-                        try:
-                            # Copiar template fixo para temporário
-                            caminho_fixo = "template/Template_ata_ebserh.docx"
-                            if not os.path.exists(caminho_fixo):
-                                st.error(f"Template não encontrado: {caminho_fixo}")
-                                return
-                            
-                            doc_obj = Document(caminho_fixo)
-                            
-                            # Preencher o documento com os dados do Firebase
-                            preencher_campos(doc_obj, data)
+    for doc in docs:
+        data = doc.to_dict()
+        if termo_busca.lower() in str(data.get(campo_firebase, "")).lower():
+            resultados.append((doc.id, data))
 
-                            # Salvar o documento preenchido em um arquivo temporário
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as preenchido_path:
-                                doc_obj.save(preenchido_path.name)
-                                
-                                # Converter e salvar em Downloads
-                                pdf_path = converter_para_pdf(preenchido_path.name)
+    if resultados:
+        for doc_id, data in resultados:
+            df_info = pd.DataFrame({
+                "Item": list(campos.keys()),
+            "Info": [str(data.get(campos[campo], "")) for campo in campos]
+            })
 
-                            with open(pdf_path, "rb") as pdf_file:
-                                st.download_button(
-                                    label="Baixar PDF",
-                                    data=pdf_file,
-                                    file_name=f"projeto_{doc_id}.pdf",
-                                    mime="application/pdf"
-                                )
-                            st.success(f"PDF gerado com sucesso!")
-                        except Exception as e:
-                            st.error(f"Erro ao gerar PDF: {e}")
-                            st.exception(e) # Mostra o traceback do erro para depuração
-        else:
-            st.info("Nenhum projeto encontrado.")
+            st.dataframe(df_info, use_container_width=True)
+
+            if st.button(f"Gerar PDF", key=f"gerar_pdf_{doc_id}"):
+                try:
+                    # Copiar template fixo para temporário
+                    caminho_fixo = "template/Template_ata_ebserh.docx"
+                    if not os.path.exists(caminho_fixo):
+                        st.error(f"Template não encontrado: {caminho_fixo}")
+                        return
+                    temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+                    shutil.copyfile(caminho_fixo, temp_docx.name)
+
+                    # Preencher
+                    docx_obj = Document(temp_docx.name)
+                    preencher_campos(docx_obj, data)
+
+                    preenchido_path = tempfile.NamedTemporaryFile(delete=False, suffix=".docx").name
+                    docx_obj.save(preenchido_path)
+
+                    # Converter e salvar em Downloads
+                    pdf_path = converter_para_pdf(preenchido_path)
+
+                    with open(pdf_path, "rb") as pdf_file:
+                        st.download_button(
+                            label="Baixar PDF",
+                            data=pdf_file,
+                            file_name=f"projeto_{doc_id}.pdf",
+                            mime="application/pdf"
+                        )
+
+                    st.success(f"PDF gerado e salvo em: {pdf_path}")
+                except Exception as e:
+                    st.error(f"Erro ao gerar PDF: {e}")
+    else:
+        st.info("Nenhum projeto encontrado.")
 
 if __name__ == "__main__":
     main()
