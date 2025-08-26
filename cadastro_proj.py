@@ -35,8 +35,6 @@ def main():
 
     st.header("1. Defina o Prazo do Projeto")
     
-    # <<< MUDANÇA 1: O CAMPO "prazo_meses" AGORA FICA FORA DO FORMULÁRIO >>>
-    # Isso permite que a tabela seja re-renderizada sem submeter o formulário inteiro.
     prazo_meses = st.number_input(
         "Prazo do projeto (em meses)", 
         min_value=1, 
@@ -65,18 +63,21 @@ def main():
         objeto = st.text_area("Objeto do Contrato:")
 
         st.header("3. Tabela de Planejamento")
-        st.info("Preencha os itens e valores diretamente na tabela abaixo.")
+        st.info("Preencha os itens e os valores mensais. A coluna 'Total por etapa' será calculada automaticamente ao salvar.")
 
+        # --- ALTERAÇÃO 1: Adicionando a nova coluna na definição do DataFrame ---
         colunas_meses = [f"Mês {i+1}" for i in range(prazo_meses)]
-        df_inicial = pd.DataFrame(columns=['Item'] + colunas_meses)
+        colunas_tabela = ['Item', 'Total por etapa'] + colunas_meses
+        df_inicial = pd.DataFrame(columns=colunas_tabela)
         
         edited_df = st.data_editor(
             df_inicial,
             num_rows="dynamic",
             use_container_width=True,
             height=250,
-            # <<< MUDANÇA 2: Esconde o índice do pandas para uma UI mais limpa >>>
-            hide_index=True
+            hide_index=True,
+            # Garante que a ordem das colunas seja a desejada
+            column_order=colunas_tabela
         )
 
         enviar = st.form_submit_button("✔️ Salvar Projeto e Tabela")
@@ -85,7 +86,21 @@ def main():
         if edited_df.empty or edited_df['Item'].isnull().all():
             st.error("A tabela está vazia ou a coluna 'Item' não foi preenchida. Adicione pelo menos uma linha.")
         else:
-            tabela_para_salvar = edited_df.fillna("").to_dict(orient='records')
+            # --- ALTERAÇÃO 2: Lógica para calcular o total antes de salvar ---
+            df_calculado = edited_df.copy()
+            
+            # Garante que as colunas de meses existam antes de tentar somá-las
+            colunas_meses_existentes = [col for col in colunas_meses if col in df_calculado.columns]
+            
+            # Converte as colunas de meses para tipo numérico, tratando erros (textos viram 0)
+            for col in colunas_meses_existentes:
+                df_calculado[col] = pd.to_numeric(df_calculado[col], errors='coerce').fillna(0)
+            
+            # Soma os valores das colunas dos meses para cada linha (item)
+            df_calculado['Total por etapa'] = df_calculado[colunas_meses_existentes].sum(axis=1)
+            
+            # Usa o dataframe com os totais calculados para salvar no Firebase
+            tabela_para_salvar = df_calculado.fillna("").to_dict(orient='records')
 
             dados = {
                 "n_contrato": n_contrato,
@@ -95,14 +110,16 @@ def main():
                 "valor_bens_receb": valor_bens_receb,
                 "contratante": contratante,
                 "contratada": contratada,
-                "prazo_meses": prazo_meses, # <<< IMPORTANTE: Salvar o prazo para usar depois
+                "prazo_meses": prazo_meses,
                 "table": tabela_para_salvar 
             }
 
             try:
                 doc_ref = db.collection("projetos").add(dados)
                 st.success(f"Projeto e tabela salvos com sucesso! ID do Projeto: `{doc_ref[1].id}`")
-                st.json(tabela_para_salvar)
+                st.write("Tabela final salva (com totais calculados):")
+                # --- ALTERAÇÃO 3: Exibe o dataframe final com os totais para o usuário ---
+                st.dataframe(df_calculado)
             except Exception as e:
                 st.error(f"Erro ao salvar no Firebase: {e}")
 
