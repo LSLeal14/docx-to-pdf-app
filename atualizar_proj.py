@@ -81,6 +81,22 @@ def main():
 
     df = pd.DataFrame(tabela_medicao_dados)
 
+    # --- ALTERAÇÃO: GARANTE A ORDEM CORRETA DAS COLUNAS ---
+    try:
+        # 1. Define a ordem ideal das colunas com base nos dados do projeto
+        prazo_meses = int(projeto_data.get("prazo_meses", 12)) # Pega o prazo ou assume 12
+        colunas_meses = [f"Mês {i+1}" for i in range(prazo_meses)]
+        ordem_ideal = ['Item', 'Total por etapa'] + colunas_meses + ['Total', 'Percentual do total da etapa']
+
+        # 2. Filtra a ordem ideal para incluir apenas colunas que realmente existem no DataFrame
+        colunas_existentes_ordenadas = [col for col in ordem_ideal if col in df.columns]
+
+        # 3. Reordena o DataFrame para garantir a consistência da visualização
+        df = df[colunas_existentes_ordenadas]
+    except Exception as e:
+        st.warning(f"Não foi possível reordenar as colunas. Exibindo na ordem padrão. Erro: {e}")
+    # --- FIM DA ALTERAÇÃO ---
+
     # Exibe o editor da tabela
     df_editado = st.data_editor(
         df,
