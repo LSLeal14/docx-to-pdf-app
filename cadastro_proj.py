@@ -81,30 +81,25 @@ def main():
         enviar = st.form_submit_button("✔️ Salvar Projeto e Tabela")
 
     if enviar:
-        # --- ALTERAÇÃO PRINCIPAL: Verificação de unicidade do contrato ---
-        # 1. Valida se o campo de contrato não está vazio
+        # Verificação de unicidade do contrato
         if not n_contrato.strip():
             st.error("O campo 'Contrato n°' é obrigatório. Por favor, preencha-o.")
-            st.stop() # Para a execução
+            st.stop()
 
-        # 2. Verifica se o contrato já existe no banco de dados
         try:
             projetos_ref = db.collection("projetos")
-            # Cria uma query para buscar documentos com o mesmo número de contrato
             query = projetos_ref.where("n_contrato", "==", n_contrato.strip()).limit(1).stream()
-            
-            # Se a query retornar qualquer resultado, o contrato já existe
             if any(query):
                 st.error(f"Erro: Já existe um projeto cadastrado com o Contrato n° '{n_contrato}'.")
-                st.stop() # Para a execução
+                st.stop()
         except Exception as e:
             st.error(f"Ocorreu um erro ao verificar a existência do contrato: {e}")
             st.stop()
-        # --- FIM DA ALTERAÇÃO ---
 
         if edited_df.empty or edited_df['Item'].isnull().all():
             st.error("A tabela está vazia ou a coluna 'Item' não foi preenchida. Adicione pelo menos uma linha.")
         else:
+            # --- CÁLCULO DA TABELA DE PLANEJAMENTO ---
             df_calculado = edited_df.copy()
             colunas_meses_existentes = [col for col in colunas_meses if col in df_calculado.columns]
             
@@ -113,7 +108,30 @@ def main():
             
             df_calculado['Total por etapa'] = df_calculado[colunas_meses_existentes].sum(axis=1)
             
-            tabela_para_salvar = df_calculado.fillna("").to_dict(orient='records')
+            tabela_planejamento_salvar = df_calculado.fillna("").to_dict(orient='records')
+
+            # --- ALTERAÇÃO: CRIAÇÃO DA TABELA DE MEDIÇÃO ---
+            # 1. Copia a estrutura base da tabela de planejamento
+            df_medicao = df_calculado[['Item', 'Total por etapa']].copy()
+
+            # 2. Adiciona as colunas de meses, mas vazias, pois serão preenchidas no futuro
+            for col in colunas_meses_existentes:
+                df_medicao[col] = ""
+
+            # 3. Adiciona a coluna 'Total' inicializada com 0
+            df_medicao['Total'] = 0.0
+
+            # 4. Adiciona a coluna 'Percentual do total da etapa' inicializada com '0.00%'
+            df_medicao['Percentual do total da etapa'] = '0.00%'
+
+            # 5. Garante a ordem correta das colunas
+            colunas_medicao_ordenadas = ['Item', 'Total por etapa'] + colunas_meses_existentes + ['Total', 'Percentual do total da etapa']
+            df_medicao = df_medicao[colunas_medicao_ordenadas]
+
+            # 6. Converte a tabela de medição para o formato de salvamento
+            tabela_medicao_salvar = df_medicao.fillna("").to_dict(orient='records')
+            
+            # --- FIM DA ALTERAÇÃO ---
 
             dados = {
                 "n_contrato": n_contrato.strip(),
@@ -124,15 +142,17 @@ def main():
                 "contratante": contratante,
                 "contratada": contratada,
                 "prazo_meses": prazo_meses,
-                "table": tabela_para_salvar 
+                "table": tabela_planejamento_salvar, # Tabela de Planejamento
+                "tabela_medicao": tabela_medicao_salvar # Nova Tabela de Medição
             }
 
             try:
-                # Se o código chegou até aqui, o contrato é único e pode ser salvo.
                 doc_ref = db.collection("projetos").add(dados)
-                st.success(f"Projeto e tabela salvos com sucesso! ID do Projeto: `{doc_ref[1].id}`")
-                st.write("Tabela final salva (com totais calculados):")
+                st.success(f"Projeto e tabelas salvos com sucesso! ID do Projeto: `{doc_ref[1].id}`")
+                st.write("Tabela de Planejamento salva:")
                 st.dataframe(df_calculado)
+                st.write("Tabela de Medição inicial criada:")
+                st.dataframe(df_medicao)
             except Exception as e:
                 st.error(f"Erro ao salvar no Firebase: {e}")
 
