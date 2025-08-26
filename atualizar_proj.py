@@ -5,41 +5,49 @@ from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 import pandas as pd
 
-# Firebase init
+# Inicialização do Firebase (usando cache para evitar reconexões)
 @st.cache_resource
 def init_firebase():
+    """Inicializa a conexão com o Firebase de forma segura."""
     load_dotenv()
-    FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(FIREBASE_KEY_PATH)
-        firebase_admin.initialize_app(cred)
+    try:
+        FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
+        if not os.path.exists(FIREBASE_KEY_PATH):
+            st.error(f"Arquivo de chave do Firebase não encontrado em: {FIREBASE_KEY_PATH}")
+            st.stop()
+        
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(FIREBASE_KEY_PATH)
+            firebase_admin.initialize_app(cred)
+            
+    except Exception as e:
+        st.error(f"Erro ao inicializar o Firebase: {e}")
+        st.stop()
+        
     return firestore.client()
 
 db = init_firebase()
 
-def gen_pdf():
-    return 0
-
 def main():
     st.set_page_config(layout="wide")
-    st.title("Atualização de Projeto")
+    st.title("Atualização da Medição do Projeto")
 
-    # Filtro de busca
-    campos = {
+    # --- Seção de Busca de Projeto ---
+    st.header("1. Encontre o Projeto")
+    campos_busca = {
         "N° do Contrato": "n_contrato",
         "Contratada": "contratada"
     }
-
-    campo_escolhido = st.selectbox("Buscar projeto por:", list(campos.keys()))
+    campo_escolhido = st.selectbox("Buscar projeto por:", list(campos_busca.keys()))
     termo_busca = st.text_input("Digite o termo de busca:")
 
     if not termo_busca:
-        st.info("Digite um termo para iniciar a busca.")
-        return
+        st.info("Digite um termo para iniciar a busca de projetos.")
+        st.stop()
 
     # Consulta no Firestore
     projetos_ref = db.collection("projetos").stream()
-    campo_firebase = campos[campo_escolhido]
+    campo_firebase = campos_busca[campo_escolhido]
 
     projetos_filtrados = []
     for doc in projetos_ref:
@@ -48,57 +56,78 @@ def main():
             projetos_filtrados.append((doc.id, data))
 
     if not projetos_filtrados:
-        st.warning("Nenhum projeto encontrado.")
-        return
+        st.warning("Nenhum projeto encontrado com os critérios de busca.")
+        st.stop()
 
-    # Seleciona entre os resultados encontrados
-    projeto_opcoes = {f"{d.get('n_contrato', '')} - {d.get('contratada', '')}": (doc_id, d) 
+    # --- Seção de Seleção e Edição ---
+    projeto_opcoes = {f"{d.get('n_contrato', 'Sem Contrato')} - {d.get('objeto', 'Sem Objeto')}": (doc_id, d) 
                       for doc_id, d in projetos_filtrados}
+    
+    nome_projeto_selecionado = st.selectbox("Selecione o projeto para editar:", list(projeto_opcoes.keys()))
+    
+    if not nome_projeto_selecionado:
+        st.stop()
 
-    nome_projeto_selecionado = st.selectbox("Selecione o projeto:", list(projeto_opcoes.keys()))
-    projeto_id, projeto = projeto_opcoes[nome_projeto_selecionado]
+    projeto_id, projeto_data = projeto_opcoes[nome_projeto_selecionado]
 
-    # Carrega a tabela
-    linhas = projeto.get("linhas", [])
-    colunas = projeto.get("colunas", [])
-    tabela_dict = projeto.get("tabela", {})
+    st.header("2. Edite a Tabela de Medição")
+    st.info("Preencha os valores medidos para cada mês. O Total e o Percentual serão calculados automaticamente.")
 
-    df = pd.DataFrame.from_dict(tabela_dict, orient="columns")
-    df = df.reindex(index=linhas, columns=colunas)
-    df.index.name = "Item"
+    # Carrega a tabela de medição do projeto
+    tabela_medicao_dados = projeto_data.get("tabela_medicao", [])
+    if not tabela_medicao_dados:
+        st.error("Este projeto não possui uma tabela de medição para editar.")
+        st.stop()
 
-    st.markdown("## Tabela de Medições")
+    df = pd.DataFrame(tabela_medicao_dados)
 
-    # Verifica se precisa crescer colunas
-    mes_atual = st.number_input("Informe o mês atual do projeto", min_value=1, value=len(colunas))
-
-    if mes_atual > len(colunas):
-        for i in range(len(colunas) + 1, mes_atual + 1):
-            df[f"Mês {i}"] = ""
-        colunas = list(df.columns)
-
-    # Editor (sem adicionar linhas, sem checkbox)
+    # Exibe o editor da tabela
     df_editado = st.data_editor(
         df,
         use_container_width=True,
-        num_rows="fixed",
-        hide_index=False
+        hide_index=True,
+        # Desabilita a edição de colunas calculadas para evitar erros
+        disabled=['Item', 'Total por etapa', 'Total', 'Percentual do total da etapa']
     )
 
-    # Botão de salvar
-    if st.button("Salvar alterações"):
-        try:
-            dados_atualizados = {
-                **projeto,
-                "colunas": list(df_editado.columns),
-                "linhas": list(df_editado.index),
-                "tabela": df_editado.fillna("").to_dict(orient="dict")
-            }
+    # --- Seção de Salvamento com Recálculo ---
+    if st.button("✔️ Salvar Alterações na Medição"):
+        with st.spinner("Calculando e salvando..."):
+            try:
+                # Identifica as colunas de meses
+                colunas_meses = [col for col in df_editado.columns if col.startswith('Mês ')]
 
-            db.collection("projetos").document(projeto_id).set(dados_atualizados)
-            st.success("Atualizações salvas com sucesso!")
-        except Exception as e:
-            st.error(f"Erro ao salvar: {e}")
+                # Converte os valores dos meses para numérico, tratando erros
+                for col in colunas_meses:
+                    df_editado[col] = pd.to_numeric(df_editado[col], errors='coerce').fillna(0)
+                
+                # Garante que as colunas de total sejam numéricas
+                df_editado['Total por etapa'] = pd.to_numeric(df_editado['Total por etapa'], errors='coerce').fillna(0)
+
+                # Recalcula a coluna 'Total'
+                df_editado['Total'] = df_editado[colunas_meses].sum(axis=1)
+
+                # Recalcula a coluna 'Percentual do total da etapa'
+                # Evita divisão por zero
+                df_editado['Percentual do total da etapa'] = df_editado.apply(
+                    lambda row: f"{(row['Total'] / row['Total por etapa'] * 100):.2f}%" if row['Total por etapa'] > 0 else "0.00%",
+                    axis=1
+                )
+
+                # Converte o DataFrame atualizado para o formato de salvamento
+                tabela_medicao_atualizada = df_editado.fillna("").to_dict(orient='records')
+                
+                # Atualiza apenas o campo 'tabela_medicao' no documento do Firestore
+                db.collection("projetos").document(projeto_id).update({
+                    "tabela_medicao": tabela_medicao_atualizada
+                })
+                
+                st.success("Tabela de medição atualizada com sucesso!")
+                st.write("Dados atualizados:")
+                st.dataframe(df_editado)
+
+            except Exception as e:
+                st.error(f"Ocorreu um erro ao salvar as alterações: {e}")
 
 if __name__ == "__main__":
     main()
