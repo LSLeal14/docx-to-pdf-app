@@ -65,7 +65,6 @@ def main():
         st.header("3. Tabela de Planejamento")
         st.info("Preencha os itens e os valores mensais. A coluna 'Total por etapa' será calculada automaticamente ao salvar.")
 
-        # --- ALTERAÇÃO 1: Adicionando a nova coluna na definição do DataFrame ---
         colunas_meses = [f"Mês {i+1}" for i in range(prazo_meses)]
         colunas_tabela = ['Item', 'Total por etapa'] + colunas_meses
         df_inicial = pd.DataFrame(columns=colunas_tabela)
@@ -76,34 +75,48 @@ def main():
             use_container_width=True,
             height=250,
             hide_index=True,
-            # Garante que a ordem das colunas seja a desejada
             column_order=colunas_tabela
         )
 
         enviar = st.form_submit_button("✔️ Salvar Projeto e Tabela")
 
     if enviar:
+        # --- ALTERAÇÃO PRINCIPAL: Verificação de unicidade do contrato ---
+        # 1. Valida se o campo de contrato não está vazio
+        if not n_contrato.strip():
+            st.error("O campo 'Contrato n°' é obrigatório. Por favor, preencha-o.")
+            st.stop() # Para a execução
+
+        # 2. Verifica se o contrato já existe no banco de dados
+        try:
+            projetos_ref = db.collection("projetos")
+            # Cria uma query para buscar documentos com o mesmo número de contrato
+            query = projetos_ref.where("n_contrato", "==", n_contrato.strip()).limit(1).stream()
+            
+            # Se a query retornar qualquer resultado, o contrato já existe
+            if any(query):
+                st.error(f"Erro: Já existe um projeto cadastrado com o Contrato n° '{n_contrato}'.")
+                st.stop() # Para a execução
+        except Exception as e:
+            st.error(f"Ocorreu um erro ao verificar a existência do contrato: {e}")
+            st.stop()
+        # --- FIM DA ALTERAÇÃO ---
+
         if edited_df.empty or edited_df['Item'].isnull().all():
             st.error("A tabela está vazia ou a coluna 'Item' não foi preenchida. Adicione pelo menos uma linha.")
         else:
-            # --- ALTERAÇÃO 2: Lógica para calcular o total antes de salvar ---
             df_calculado = edited_df.copy()
-            
-            # Garante que as colunas de meses existam antes de tentar somá-las
             colunas_meses_existentes = [col for col in colunas_meses if col in df_calculado.columns]
             
-            # Converte as colunas de meses para tipo numérico, tratando erros (textos viram 0)
             for col in colunas_meses_existentes:
                 df_calculado[col] = pd.to_numeric(df_calculado[col], errors='coerce').fillna(0)
             
-            # Soma os valores das colunas dos meses para cada linha (item)
             df_calculado['Total por etapa'] = df_calculado[colunas_meses_existentes].sum(axis=1)
             
-            # Usa o dataframe com os totais calculados para salvar no Firebase
             tabela_para_salvar = df_calculado.fillna("").to_dict(orient='records')
 
             dados = {
-                "n_contrato": n_contrato,
+                "n_contrato": n_contrato.strip(),
                 "periodo_vigencia": [str(periodo_vigencia[0]), str(periodo_vigencia[1])],
                 "n_os": n_os,
                 "objeto": objeto,
@@ -115,10 +128,10 @@ def main():
             }
 
             try:
+                # Se o código chegou até aqui, o contrato é único e pode ser salvo.
                 doc_ref = db.collection("projetos").add(dados)
                 st.success(f"Projeto e tabela salvos com sucesso! ID do Projeto: `{doc_ref[1].id}`")
                 st.write("Tabela final salva (com totais calculados):")
-                # --- ALTERAÇÃO 3: Exibe o dataframe final com os totais para o usuário ---
                 st.dataframe(df_calculado)
             except Exception as e:
                 st.error(f"Erro ao salvar no Firebase: {e}")
