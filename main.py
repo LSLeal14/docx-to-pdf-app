@@ -4,6 +4,7 @@ import cadastro_proj
 import consultar_proj
 import atualizar_proj
 import gera_pdf
+import atualizar_medi
 
 st.set_page_config(layout="wide")
 
@@ -22,6 +23,8 @@ with st.sidebar:
         st.session_state.page = "consultar"
     if st.button("Atualização de Projeto", type="tertiary"):
         st.session_state.page = "atualizar"
+    if st.button("Atualização de Medições", type="tertiary"):
+        st.session_state.page = "medicoes"
 
 
 # Mostra a página correspondente
@@ -33,3 +36,5 @@ elif st.session_state.page == "consultar":
     consultar_proj.main()
 elif st.session_state.page == "atualizar":
     atualizar_proj.main()
+elif st.session_state.page == "medicoes":
+    atualizar_medi.main()

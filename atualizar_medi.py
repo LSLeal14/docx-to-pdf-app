@@ -30,7 +30,7 @@ db = init_firebase()
 
 def main():
     st.set_page_config(layout="wide")
-    st.title("Atualização do Projeto")
+    st.title("Atualização da Medição do Projeto")
 
     # --- Seção de Busca de Projeto ---
     st.header("1. Encontre o Projeto")
@@ -70,21 +70,21 @@ def main():
 
     projeto_id, projeto_data = projeto_opcoes[nome_projeto_selecionado]
 
-    st.header("2. Edite a Tabela de Projeto")
+    st.header("2. Edite a Tabela de Medição")
     
     # Carrega a tabela de medição e o prazo original
-    tabela_medicao_dados = projeto_data.get("table", [])
+    tabela_medicao_dados = projeto_data.get("tabela_medicao", [])
     prazo_meses_original = int(projeto_data.get("prazo_meses", 12))
     
     if not tabela_medicao_dados:
-        st.error("Este projeto não possui uma tabela de projeto para editar.")
+        st.error("Este projeto não possui uma tabela de medição para editar.")
         st.stop()
 
     df = pd.DataFrame(tabela_medicao_dados)
 
     # --- ALTERAÇÃO 1: CAMPO PARA INFORMAR MÊS ATUAL E LIDAR COM ATRASOS ---
     mes_medicao_atual = st.number_input(
-        "Informe o novo prazo de conclusão do projeto:",
+        "Informe o mês da medição a ser atualizada:",
         min_value=1,
         value=prazo_meses_original, # O valor padrão é o prazo atual do projeto
         step=1,
@@ -105,14 +105,14 @@ def main():
     try:
         prazo_a_considerar = max(prazo_meses_original, mes_medicao_atual)
         colunas_meses = [f"Mês {i+1}" for i in range(prazo_a_considerar)]
-        ordem_ideal = ['Item', 'Total por etapa'] + colunas_meses
+        ordem_ideal = ['Item', 'Total por etapa'] + colunas_meses + ['Total', 'Percentual do total da etapa']
         
         colunas_existentes_ordenadas = [col for col in ordem_ideal if col in df.columns]
         df = df[colunas_existentes_ordenadas]
     except Exception as e:
         st.warning(f"Não foi possível reordenar as colunas. Exibindo na ordem padrão. Erro: {e}")
 
-    st.info("Preencha os novos valores para cada mês")
+    st.info("Preencha os valores medidos para cada mês. O Total e o Percentual serão calculados automaticamente ao salvar.")
     
     # Exibe o editor da tabela (agora com as possíveis novas colunas)
     df_editado = st.data_editor(
@@ -123,7 +123,7 @@ def main():
     )
 
     # --- Seção de Salvamento com Recálculo ---
-    if st.button("✔️ Salvar Alterações no Projeto"):
+    if st.button("✔️ Salvar Alterações na Medição"):
         with st.spinner("Calculando e salvando..."):
             try:
                 colunas_meses = [col for col in df_editado.columns if col.startswith('Mês ')]
@@ -131,12 +131,17 @@ def main():
                     df_editado[col] = pd.to_numeric(df_editado[col], errors='coerce').fillna(0)
                 
                 df_editado['Total por etapa'] = pd.to_numeric(df_editado['Total por etapa'], errors='coerce').fillna(0)
+                df_editado['Total'] = df_editado[colunas_meses].sum(axis=1)
+                df_editado['Percentual do total da etapa'] = df_editado.apply(
+                    lambda row: f"{(row['Total'] / row['Total por etapa'] * 100):.2f}%" if row['Total por etapa'] > 0 else "0.00%",
+                    axis=1
+                )
 
-                tabela_planejamento_atualizada = df_editado.fillna("").to_dict(orient='records')
+                tabela_medicao_atualizada = df_editado.fillna("").to_dict(orient='records')
                 
                 # --- ALTERAÇÃO 2: ATUALIZA O PRAZO DO PROJETO SE NECESSÁRIO ---
                 dados_para_atualizar = {
-                    "table": tabela_planejamento_atualizada
+                    "tabela_medicao": tabela_medicao_atualizada
                 }
                 if mes_medicao_atual > prazo_meses_original:
                     dados_para_atualizar["prazo_meses"] = mes_medicao_atual
