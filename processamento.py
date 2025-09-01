@@ -40,7 +40,7 @@ def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFra
         print(f"Ocorreu um erro inesperado ao gerar a tabela para o projeto {project_id}: {e}")
         return None
 
-def gerar_tabela_cumulativa(db: firestore.client, project_id: str) -> pd.DataFrame:
+def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd.DataFrame:
     """
     Gera uma tabela comparativa acumulada entre o planejamento e a medição.
 
