@@ -65,15 +65,16 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
                       Retorna None se os dados não forem encontrados ou ocorrer um erro.
     """
     try:
-        # 1. Buscar dados da tabela de PLANEJAMENTO
-        planejamento_ref = db.collection("planejamento").document(project_id)
-        planejamento_doc = planejamento_ref.get()
+        doc_ref = db.collection("projetos").document(project_id)
+        doc = doc_ref.get()
 
-        if not planejamento_doc.exists:
-            st.error(f"Erro: Dados de PLANEJAMENTO para o projeto '{project_id}' não encontrados.")
+        if not doc.exists:
+            st.error(f"Erro: Projeto com ID '{project_id}' não foi encontrado.")
             return None
+        
+        project_data = doc.to_dict()
+        planejamento_data = project_data.get("table", [])
 
-        planejamento_data = planejamento_doc.to_dict().get("table", [])
         if not planejamento_data:
             st.warning(f"A tabela de planejamento para o projeto '{project_id}' está vazia.")
             return pd.DataFrame()
@@ -81,14 +82,9 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
         df_planejamento = pd.DataFrame(planejamento_data)
 
         # 2. Buscar dados da tabela de MEDIÇÃO
-        medicao_ref = db.collection("medicao").document(project_id)
-        medicao_doc = medicao_ref.get()
-
-        if not medicao_doc.exists:
-            st.error(f"Erro: Dados de MEDIÇÃO para o projeto '{project_id}' não encontrados.")
-            return None
             
-        medicao_data = medicao_doc.to_dict().get("tabela_medicao", [])
+        project_data = doc.to_dict()
+        medicao_data = project_data.get("tabela_medicao", [])
         if not medicao_data:
             st.warning(f"A tabela de medição para o projeto '{project_id}' está vazia.")
             return pd.DataFrame()
