@@ -1,10 +1,9 @@
 import pandas as pd
 from firebase_admin import firestore
 import streamlit as st
-# Se você for usar esta função em um script que não seja o principal do Streamlit,
-# pode ser necessário inicializar o Firebase aqui também.
-# No entanto, o ideal é passar o cliente 'db' já inicializado como argumento.
+import re # Importando a biblioteca de expressões regulares
 
+# Manteremos a função original como referência e para uso, se necessário.
 def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFrame:
     """
     Busca os dados de um projeto no Firestore, calcula o percentual de cada etapa
@@ -22,7 +21,6 @@ def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFra
                       não for encontrado ou ocorrer um erro.
     """
     try:
-        # 1. Buscar o documento do projeto específico no Firestore
         doc_ref = db.collection("projetos").document(project_id)
         doc = doc_ref.get()
 
@@ -30,40 +28,140 @@ def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFra
             st.error(f"Erro: Projeto com ID '{project_id}' não foi encontrado.")
             return None
 
-        # 2. Extrair os dados da tabela de dentro do documento
         project_data = doc.to_dict()
         tabela_dados = project_data.get("table", [])
 
-        # Se a tabela estiver vazia, retorna um DataFrame vazio com as colunas certas
         if not tabela_dados:
             return pd.DataFrame(columns=['Item', 'Total por etapa', 'Percentual da etapa no total'])
 
-        # 3. Converter os dados extraídos para um DataFrame do Pandas
         df = pd.DataFrame(tabela_dados)
-
-        # 4. Garantir que a coluna 'Total por etapa' seja numérica para o cálculo
-        #    Valores que não são números serão convertidos para 0.
         df['Total por etapa'] = pd.to_numeric(df['Total por etapa'], errors='coerce').fillna(0)
-
-        # 5. Calcular o valor total do projeto somando todos os totais de etapa
         valor_total_projeto = df['Total por etapa'].sum()
 
-        # 6. Calcular a nova coluna de percentual
         if valor_total_projeto > 0:
-            # A fórmula é (valor da etapa / valor total) * 100
             df['Percentual da etapa no total'] = (df['Total por etapa'] / valor_total_projeto) * 100
-            # Formata a coluna para exibir como um texto com duas casas decimais e o símbolo '%'
             df['Percentual da etapa no total'] = df['Percentual da etapa no total'].apply(lambda x: f"{x:.2f}%")
         else:
-            # Caso o total seja 0, define o percentual como "0.00%" para evitar divisão por zero
             df['Percentual da etapa no total'] = "0.00%"
 
-        # 7. Selecionar e reordenar as colunas para criar a "Tabela 1" final
         tabela_1 = df[['Item', 'Total por etapa', 'Percentual da etapa no total']].copy()
-
         return tabela_1
 
     except Exception as e:
         print(f"Ocorreu um erro inesperado ao gerar a tabela para o projeto {project_id}: {e}")
-        # Em um app real, você poderia usar st.error(e) se esta função for chamada de dentro do Streamlit
         return None
+
+def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd.DataFrame:
+    """
+    Busca dados de planejamento e medição de um projeto no Firestore,
+    consolida as informações e calcula as diferenças entre previsto e realizado.
+
+    Args:
+        db (firestore.client): O cliente do Firestore já inicializado.
+        project_id (str): O ID do documento do projeto a ser processado.
+
+    Returns:
+        pd.DataFrame: Um DataFrame consolidado com análises de previsto vs. realizado.
+                      Retorna None se os dados não forem encontrados ou ocorrer um erro.
+    """
+    try:
+        # 1. Buscar dados da tabela de PLANEJAMENTO
+        planejamento_ref = db.collection("planejamento").document(project_id)
+        planejamento_doc = planejamento_ref.get()
+
+        if not planejamento_doc.exists:
+            st.error(f"Erro: Dados de PLANEJAMENTO para o projeto '{project_id}' não encontrados.")
+            return None
+
+        planejamento_data = planejamento_doc.to_dict().get("table", [])
+        if not planejamento_data:
+            st.warning(f"A tabela de planejamento para o projeto '{project_id}' está vazia.")
+            return pd.DataFrame()
+        
+        df_planejamento = pd.DataFrame(planejamento_data)
+
+        # 2. Buscar dados da tabela de MEDIÇÃO
+        medicao_ref = db.collection("medicao").document(project_id)
+        medicao_doc = medicao_ref.get()
+
+        if not medicao_doc.exists:
+            st.error(f"Erro: Dados de MEDIÇÃO para o projeto '{project_id}' não encontrados.")
+            return None
+            
+        medicao_data = medicao_doc.to_dict().get("tabela_medicao", [])
+        if not medicao_data:
+            st.warning(f"A tabela de medição para o projeto '{project_id}' está vazia.")
+            return pd.DataFrame()
+
+        df_medicao = pd.DataFrame(medicao_data)
+
+        # 3. Processar DataFrame de PLANEJAMENTO
+        # Identificar colunas de meses (ex: Jan, Fev, Mar, etc.)
+        colunas_meses_planejamento = [col for col in df_planejamento.columns if re.match(r'^(Jan|Fev|Mar|Abr|Mai|Jun|Jul|Ago|Set|Out|Nov|Dez)$', col, re.I)]
+        
+        # Converter colunas de meses para numérico e somar para obter o 'Valor Previsto'
+        for col in colunas_meses_planejamento:
+            df_planejamento[col] = pd.to_numeric(df_planejamento[col], errors='coerce').fillna(0)
+        df_planejamento['Valor Previsto'] = df_planejamento[colunas_meses_planejamento].sum(axis=1)
+        
+        # Selecionar colunas de interesse do planejamento
+        df_planejamento_final = df_planejamento[['Item', 'Descrição', 'Valor Previsto']].copy()
+
+        # 4. Processar DataFrame de MEDIÇÃO
+        # Garantir que as colunas de valores são numéricas
+        df_medicao['Total por etapa'] = pd.to_numeric(df_medicao['Total por etapa'], errors='coerce').fillna(0)
+        df_medicao['Total Realizado'] = pd.to_numeric(df_medicao['Total Realizado'], errors='coerce').fillna(0)
+        
+        # Selecionar colunas de interesse da medição
+        df_medicao_final = df_medicao[['Item', 'Total por etapa', 'Total Realizado']].copy()
+
+        # 5. Unir as duas tabelas usando a coluna 'Item' como chave
+        df_final = pd.merge(df_planejamento_final, df_medicao_final, on="Item", how="left")
+        # Preencher com 0 caso um item planejado ainda não tenha medição
+        df_final.fillna(0, inplace=True)
+
+        # 6. Calcular os percentuais e o desvio
+        # Evitar divisão por zero
+        total_etapa = df_final['Total por etapa']
+        
+        # Cálculo do Percentual Previsto
+        df_final['Percentual Previsto'] = (df_final['Valor Previsto'] / total_etapa).where(total_etapa != 0, 0) * 100
+        
+        # Cálculo do Percentual Realizado
+        df_final['Percentual Realizado'] = (df_final['Total Realizado'] / total_etapa).where(total_etapa != 0, 0) * 100
+        
+        # Cálculo do Desvio
+        df_final['Desvio Percentual'] = df_final['Percentual Realizado'] - df_final['Percentual Previsto']
+
+        # 7. Formatar e organizar o DataFrame final
+        df_final.rename(columns={
+            'Item': 'Número do Item',
+            'Total Realizado': 'Valor Realizado'
+        }, inplace=True)
+        
+        # Formatação das colunas de percentual para exibição
+        df_final['Percentual Previsto'] = df_final['Percentual Previsto'].apply(lambda x: f"{x:.2f}%")
+        df_final['Percentual Realizado'] = df_final['Percentual Realizado'].apply(lambda x: f"{x:.2f}%")
+        df_final['Desvio Percentual'] = df_final['Desvio Percentual'].apply(lambda x: f"{x:.2f}%")
+
+        # Selecionar e reordenar as colunas para a tabela final
+        colunas_finais = [
+            'Número do Item', 'Descrição', 'Total por etapa', 
+            'Valor Previsto', 'Percentual Previsto', 
+            'Valor Realizado', 'Percentual Realizado', 
+            'Desvio Percentual'
+        ]
+        
+        return df_final[colunas_finais]
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao gerar a tabela consolidada para o projeto {project_id}: {e}")
+        return None
+
+# Exemplo de como você poderia chamar a função em seu app Streamlit
+# (requer que o Firebase já esteja inicializado e o 'db' e 'project_id' estejam disponíveis)
+#
+# if 'db' in st.session_state and 'project_id' in st.session_state:
+#     tabela_consolidada = gerar_tabela_previsto_realizado(st.session_state.db, st.session_state.project_id)
+#     if tabela_consolidada is not None:
+#         st.dataframe(tabela_consolidada)

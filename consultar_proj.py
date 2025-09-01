@@ -192,14 +192,14 @@ def main():
     if resultados:
         for doc_id, data in resultados:
             st.markdown(f"---")
-            st.write(f"**ID do Projeto:** `{doc_id}`")
+            #st.write(f"**ID do Projeto:** `{doc_id}`")
             df_info = pd.DataFrame({
                 "Item": list(campos.keys()),
                 "Info": [str(data.get(campos[campo], "")) for campo in campos]
             })
             st.table(df_info)
 
-            if st.button(f"Gerar PDF para o Projeto {doc_id}", key=f"gerar_pdf_{doc_id}"):
+            if st.button(f"Gerar PDF para o Projeto", key=f"gerar_pdf_{doc_id}"):
                 with st.spinner("Gerando documento..."):
                     try:
                         # --- ALTERAÇÃO PRINCIPAL ---
