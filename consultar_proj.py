@@ -210,7 +210,7 @@ def main():
                             st.error("Falha ao gerar a tabela de análise percentual.")
                             continue
 
-                        tabela_2_df = gerar_tabela_previsto_realizado(st.session_state.db, st.session_state.project_id)
+                        tabela_2_df = gerar_tabela_previsto_realizado(db, doc_id)
                         if tabela_2_df is not None:
                             st.error("Falha ao gerar a tabela de de comparativo.")
                             continue
