@@ -3,22 +3,11 @@ from firebase_admin import firestore
 import streamlit as st
 import re # Importando a biblioteca de expressões regulares
 
-# Manteremos a função original como referência e para uso, se necessário.
+# A função de gerar a Tabela 1 permanece a mesma, como referência.
 def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFrame:
     """
     Busca os dados de um projeto no Firestore, calcula o percentual de cada etapa
     em relação ao valor total do projeto e retorna um DataFrame formatado.
-
-    Esta função é projetada para ser a "Tabela 1".
-
-    Args:
-        db (firestore.client): O cliente do Firestore já inicializado.
-        project_id (str): O ID do documento do projeto a ser processado.
-
-    Returns:
-        pd.DataFrame: Um DataFrame com as colunas 'Item', 'Total por etapa', e
-                      'Percentual da etapa no total'. Retorna None se o projeto
-                      não for encontrado ou ocorrer um erro.
     """
     try:
         doc_ref = db.collection("projetos").document(project_id)
@@ -51,96 +40,96 @@ def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFra
         print(f"Ocorreu um erro inesperado ao gerar a tabela para o projeto {project_id}: {e}")
         return None
 
-def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd.DataFrame:
+def gerar_tabela_cumulativa(db: firestore.client, project_id: str) -> pd.DataFrame:
     """
-    Busca dados de planejamento e medição de um projeto no Firestore,
-    consolida as informações e calcula as diferenças entre previsto e realizado.
+    Gera uma tabela comparativa acumulada entre o planejamento e a medição.
+
+    A função identifica o último mês com dados na tabela de medição e calcula
+    os totais previstos e realizados acumulados até esse mês específico.
 
     Args:
         db (firestore.client): O cliente do Firestore já inicializado.
         project_id (str): O ID do documento do projeto a ser processado.
 
     Returns:
-        pd.DataFrame: Um DataFrame consolidado com análises de previsto vs. realizado.
-                      Retorna None se os dados não forem encontrados ou ocorrer um erro.
+        pd.DataFrame: DataFrame consolidado com a análise acumulada, ou None em caso de erro.
     """
     try:
+        # 1. Buscar o documento único do projeto no Firestore
         doc_ref = db.collection("projetos").document(project_id)
         doc = doc_ref.get()
-
         if not doc.exists:
             st.error(f"Erro: Projeto com ID '{project_id}' não foi encontrado.")
             return None
         
         project_data = doc.to_dict()
-        planejamento_data = project_data.get("table", [])
-
-        if not planejamento_data:
-            st.warning(f"A tabela de planejamento para o projeto '{project_id}' está vazia.")
-            return pd.DataFrame()
         
-        df_planejamento = pd.DataFrame(planejamento_data)
-
-        # 2. Buscar dados da tabela de MEDIÇÃO
-            
-        project_data = doc.to_dict()
+        # 2. Extrair dados de PLANEJAMENTO e MEDIÇÃO do mesmo documento
+        planejamento_data = project_data.get("table", [])
         medicao_data = project_data.get("tabela_medicao", [])
-        if not medicao_data:
-            st.warning(f"A tabela de medição para o projeto '{project_id}' está vazia.")
+
+        if not planejamento_data or not medicao_data:
+            st.warning("Tabela de planejamento ou medição não encontrada ou vazia no documento do projeto.")
             return pd.DataFrame()
 
+        df_planejamento = pd.DataFrame(planejamento_data)
         df_medicao = pd.DataFrame(medicao_data)
 
-        # 3. Processar DataFrame de PLANEJAMENTO
-        # Identificar colunas de meses (ex: Jan, Fev, Mar, etc.)
-        colunas_meses_planejamento = [col for col in df_planejamento.columns if re.match(r'^(Jan|Fev|Mar|Abr|Mai|Jun|Jul|Ago|Set|Out|Nov|Dez)$', col, re.I)]
+        # --- LÓGICA DE ANÁLISE CUMULATIVA ---
+
+        # 3. Identificar o último mês com medições
+        # Mapeia nomes de meses para números para poder ordená-los corretamente
+        ordem_meses = {nome: i for i, nome in enumerate(['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'])}
         
-        # Converter colunas de meses para numérico e somar para obter o 'Valor Previsto'
-        for col in colunas_meses_planejamento:
+        # Encontra colunas de meses na medição e as ordena cronologicamente
+        colunas_meses_medicao = [col for col in df_medicao.columns if col in ordem_meses]
+        colunas_meses_medicao.sort(key=lambda mes: ordem_meses[mes])
+        
+        ultimo_mes_com_dados = None
+        for mes in reversed(colunas_meses_medicao):
+            if pd.to_numeric(df_medicao[mes], errors='coerce').fillna(0).sum() > 0:
+                ultimo_mes_com_dados = mes
+                break
+
+        if not ultimo_mes_com_dados:
+            st.info("Nenhum dado de medição mensal encontrado para análise cumulativa.")
+            return pd.DataFrame()
+
+        # Pega a posição (índice) do último mês medido para saber até onde somar
+        indice_ultimo_mes = colunas_meses_medicao.index(ultimo_mes_com_dados)
+        st.success(f"Análise gerada com base nos dados acumulados até: {ultimo_mes_com_dados}")
+
+        # 4. Calcular o "Valor Previsto" ACUMULADO
+        colunas_planejamento_a_somar = colunas_meses_medicao[:indice_ultimo_mes + 1]
+        for col in colunas_planejamento_a_somar:
             df_planejamento[col] = pd.to_numeric(df_planejamento[col], errors='coerce').fillna(0)
-        df_planejamento['Valor Previsto'] = df_planejamento[colunas_meses_planejamento].sum(axis=1)
-        
-        # Selecionar colunas de interesse do planejamento
+        df_planejamento['Valor Previsto'] = df_planejamento[colunas_planejamento_a_somar].sum(axis=1)
+
+        # 5. Calcular o "Valor Realizado" ACUMULADO
+        colunas_medicao_a_somar = colunas_meses_medicao[:indice_ultimo_mes + 1]
+        for col in colunas_medicao_a_somar:
+            df_medicao[col] = pd.to_numeric(df_medicao[col], errors='coerce').fillna(0)
+        df_medicao['Valor Realizado'] = df_medicao[colunas_medicao_a_somar].sum(axis=1)
+
+        # 6. Preparar e unir os DataFrames
         df_planejamento_final = df_planejamento[['Item', 'Descrição', 'Valor Previsto']].copy()
-
-        # 4. Processar DataFrame de MEDIÇÃO
-        # Garantir que as colunas de valores são numéricas
         df_medicao['Total por etapa'] = pd.to_numeric(df_medicao['Total por etapa'], errors='coerce').fillna(0)
-        df_medicao['Total Realizado'] = pd.to_numeric(df_medicao['Total Realizado'], errors='coerce').fillna(0)
+        df_medicao_final = df_medicao[['Item', 'Total por etapa', 'Valor Realizado']].copy()
         
-        # Selecionar colunas de interesse da medição
-        df_medicao_final = df_medicao[['Item', 'Total por etapa', 'Total Realizado']].copy()
-
-        # 5. Unir as duas tabelas usando a coluna 'Item' como chave
         df_final = pd.merge(df_planejamento_final, df_medicao_final, on="Item", how="left")
-        # Preencher com 0 caso um item planejado ainda não tenha medição
         df_final.fillna(0, inplace=True)
 
-        # 6. Calcular os percentuais e o desvio
-        # Evitar divisão por zero
+        # 7. Calcular os percentuais e o desvio com base nos valores acumulados
         total_etapa = df_final['Total por etapa']
-        
-        # Cálculo do Percentual Previsto
         df_final['Percentual Previsto'] = (df_final['Valor Previsto'] / total_etapa).where(total_etapa != 0, 0) * 100
-        
-        # Cálculo do Percentual Realizado
-        df_final['Percentual Realizado'] = (df_final['Total Realizado'] / total_etapa).where(total_etapa != 0, 0) * 100
-        
-        # Cálculo do Desvio
+        df_final['Percentual Realizado'] = (df_final['Valor Realizado'] / total_etapa).where(total_etapa != 0, 0) * 100
         df_final['Desvio Percentual'] = df_final['Percentual Realizado'] - df_final['Percentual Previsto']
 
-        # 7. Formatar e organizar o DataFrame final
-        df_final.rename(columns={
-            'Item': 'Número do Item',
-            'Total Realizado': 'Valor Realizado'
-        }, inplace=True)
-        
-        # Formatação das colunas de percentual para exibição
-        df_final['Percentual Previsto'] = df_final['Percentual Previsto'].apply(lambda x: f"{x:.2f}%")
-        df_final['Percentual Realizado'] = df_final['Percentual Realizado'].apply(lambda x: f"{x:.2f}%")
-        df_final['Desvio Percentual'] = df_final['Desvio Percentual'].apply(lambda x: f"{x:.2f}%")
+        # 8. Formatar e organizar o DataFrame para exibição
+        df_final.rename(columns={'Item': 'Número do Item'}, inplace=True)
+        for col in ['Percentual Previsto', 'Percentual Realizado', 'Desvio Percentual']:
+            df_final[col] = df_final[col].apply(lambda x: f"{x:.2f}%")
 
-        # Selecionar e reordenar as colunas para a tabela final
         colunas_finais = [
             'Número do Item', 'Descrição', 'Total por etapa', 
             'Valor Previsto', 'Percentual Previsto', 
@@ -151,13 +140,11 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
         return df_final[colunas_finais]
 
     except Exception as e:
-        st.error(f"Ocorreu um erro inesperado ao gerar a tabela consolidada para o projeto {project_id}: {e}")
+        st.error(f"Ocorreu um erro inesperado ao gerar a tabela cumulativa: {e}")
         return None
 
-# Exemplo de como você poderia chamar a função em seu app Streamlit
-# (requer que o Firebase já esteja inicializado e o 'db' e 'project_id' estejam disponíveis)
-#
+# Exemplo de uso no seu App Streamlit:
 # if 'db' in st.session_state and 'project_id' in st.session_state:
-#     tabela_consolidada = gerar_tabela_previsto_realizado(st.session_state.db, st.session_state.project_id)
+#     tabela_consolidada = gerar_tabela_cumulativa(st.session_state.db, st.session_state.project_id)
 #     if tabela_consolidada is not None:
 #         st.dataframe(tabela_consolidada)
