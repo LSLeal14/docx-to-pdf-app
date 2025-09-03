@@ -75,6 +75,7 @@ def main():
     # Carrega a tabela de medição e o prazo original
     tabela_medicao_dados = projeto_data.get("tabela_medicao", [])
     prazo_meses_original = int(projeto_data.get("prazo_meses", 12))
+    medicao_atual = int(projeto_data.get("medicao_atual", 12))
     
     if not tabela_medicao_dados:
         st.error("Este projeto não possui uma tabela de medição para editar.")
@@ -86,7 +87,7 @@ def main():
     mes_medicao_atual = st.number_input(
         "Informe o mês da medição a ser atualizada:",
         min_value=1,
-        value=prazo_meses_original, # O valor padrão é o prazo atual do projeto
+        value=medicao_atual, # O valor padrão é o prazo atual do projeto
         step=1,
         help="Se o mês informado for maior que o prazo atual, a tabela será expandida."
     )
@@ -141,7 +142,8 @@ def main():
                 
                 # --- ALTERAÇÃO 2: ATUALIZA O PRAZO DO PROJETO SE NECESSÁRIO ---
                 dados_para_atualizar = {
-                    "tabela_medicao": tabela_medicao_atualizada
+                    "tabela_medicao": tabela_medicao_atualizada,
+                    "medicao_atual": medicao_atual + 1
                 }
                 if mes_medicao_atual > prazo_meses_original:
                     dados_para_atualizar["prazo_meses"] = mes_medicao_atual
