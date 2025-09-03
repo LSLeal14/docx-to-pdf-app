@@ -143,7 +143,8 @@ def main():
                 "contratada": contratada,
                 "prazo_meses": prazo_meses,
                 "table": tabela_planejamento_salvar, # Tabela de Planejamento
-                "tabela_medicao": tabela_medicao_salvar # Nova Tabela de Medição
+                "tabela_medicao": tabela_medicao_salvar, # Nova Tabela de Medição
+                "medicao_atual": 1
             }
 
             try:
