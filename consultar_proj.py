@@ -211,7 +211,8 @@ def main():
                             continue
 
                         tabela_2_df = gerar_tabela_previsto_realizado(db, doc_id)
-                        if tabela_2_df is not None:
+                        st.table(tabela_2_df)
+                        if tabela_2_df is None:
                             st.error("Falha ao gerar a tabela de de comparativo.")
                             continue
 
