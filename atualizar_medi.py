@@ -11,20 +11,13 @@ def init_firebase():
     """Inicializa a conexão com o Firebase de forma segura."""
     load_dotenv()
     try:
-        # Tenta carregar a chave a partir de variáveis de ambiente do Streamlit (Secrets)
-        firebase_credentials = st.secrets.get("firebase_credentials")
-        
-        if firebase_credentials:
-            cred = credentials.Certificate(dict(firebase_credentials))
-        else:
-            # Fallback para arquivo local se os secrets não estiverem disponíveis
-            FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
-            if not os.path.exists(FIREBASE_KEY_PATH):
-                st.error(f"Arquivo de chave do Firebase não encontrado em: {FIREBASE_KEY_PATH}. Configure o segredo 'firebase_credentials' no Streamlit para implantação.")
-                st.stop()
-            cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
+        if not os.path.exists(FIREBASE_KEY_PATH):
+            st.error(f"Arquivo de chave do Firebase não encontrado em: {FIREBASE_KEY_PATH}")
+            st.stop()
         
         if not firebase_admin._apps:
+            cred = credentials.Certificate(FIREBASE_KEY_PATH)
             firebase_admin.initialize_app(cred)
             
     except Exception as e:
