@@ -107,12 +107,17 @@ def main():
                 df_calculado[col] = pd.to_numeric(df_calculado[col], errors='coerce').fillna(0)
             
             df_calculado['Total por etapa'] = df_calculado[colunas_meses_existentes].sum(axis=1)
+
+            if not df_calculado.empty:
+                total_planejamento = pd.DataFrame(df_calculado[colunas_meses_existentes + ['Total por etapa']].sum()).T
+                total_planejamento['Item'] = 'TOTAL'
+                df_calculado = pd.concat([df_calculado, total_planejamento], ignore_index=True)
             
             tabela_planejamento_salvar = df_calculado.fillna("").to_dict(orient='records')
 
-            # --- ALTERAÇÃO: CRIAÇÃO DA TABELA DE MEDIÇÃO ---
             # 1. Copia a estrutura base da tabela de planejamento
-            df_medicao = df_calculado[['Item', 'Total por etapa']].copy()
+            df_medicao = edited_df[['Item']].copy() # Copia apenas os itens originais
+            df_medicao['Total por etapa'] = df_calculado['Total por etapa'].iloc[:len(edited_df)] # Pega os totais calculados, sem a linha de total
 
             # 2. Adiciona as colunas de meses, mas vazias, pois serão preenchidas no futuro
             for col in colunas_meses_existentes:
@@ -128,6 +133,17 @@ def main():
             colunas_medicao_ordenadas = ['Item', 'Total por etapa'] + colunas_meses_existentes + ['Total', 'Percentual do total da etapa']
             df_medicao = df_medicao[colunas_medicao_ordenadas]
 
+            if not df_medicao.empty:
+                total_medicao = pd.DataFrame(df_medicao[['Total por etapa', 'Total']].sum()).T
+                total_medicao['Item'] = 'TOTAL'
+                # Preenche as outras colunas da linha de total com valores padrão
+                for col in colunas_meses_existentes:
+                    total_medicao[col] = 0.0
+                total_medicao['Percentual do total da etapa'] = ''
+                # Garante a ordem das colunas e concatena
+                total_medicao = total_medicao[colunas_medicao_ordenadas]
+                df_medicao = pd.concat([df_medicao, total_medicao], ignore_index=True)
+            
             # 6. Converte a tabela de medição para o formato de salvamento
             tabela_medicao_salvar = df_medicao.fillna("").to_dict(orient='records')
             
