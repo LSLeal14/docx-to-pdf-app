@@ -137,6 +137,27 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
         project_data = doc.to_dict()
 
         # 2. Extrai dados do projeto
+        planejamento_data = project_data.get("table", [])
+        medicao_data = project_data.get("tabela_medicao", [])
+        medicao_atual = project_data.get("medicao_atual")
+        medicao_atual = medicao_atual - 1
+
+        if not planejamento_data or not medicao_data:
+            st.warning("Tabela de planejamento ou medição não encontrada ou vazia no documento do projeto.")
+            return pd.DataFrame()
+
+        df_planejamento = pd.DataFrame(planejamento_data)
+        df_medicao = pd.DataFrame(medicao_data)
+
+        # 3. Logica 
+
+        totais_planejamento = df_planejamento.iloc("Total")
+        totais_medicao = df_medicao.iloc("Total")
+
+        print(totais_medicao)
+        print(totais_planejamento)
+    
+
 
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao gerar a tabela cumulativa: {e}")
