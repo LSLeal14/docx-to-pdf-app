@@ -11,13 +11,20 @@ def init_firebase():
     """Inicializa a conexão com o Firebase de forma segura."""
     load_dotenv()
     try:
-        FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
-        if not os.path.exists(FIREBASE_KEY_PATH):
-            st.error(f"Arquivo de chave do Firebase não encontrado em: {FIREBASE_KEY_PATH}")
-            st.stop()
+        # Tenta carregar a chave a partir de variáveis de ambiente do Streamlit (Secrets)
+        firebase_credentials = st.secrets.get("firebase_credentials")
+        
+        if firebase_credentials:
+            cred = credentials.Certificate(dict(firebase_credentials))
+        else:
+            # Fallback para arquivo local se os secrets não estiverem disponíveis
+            FIREBASE_KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "app/firebase_key.json")
+            if not os.path.exists(FIREBASE_KEY_PATH):
+                st.error(f"Arquivo de chave do Firebase não encontrado em: {FIREBASE_KEY_PATH}. Configure o segredo 'firebase_credentials' no Streamlit para implantação.")
+                st.stop()
+            cred = credentials.Certificate(FIREBASE_KEY_PATH)
         
         if not firebase_admin._apps:
-            cred = credentials.Certificate(FIREBASE_KEY_PATH)
             firebase_admin.initialize_app(cred)
             
     except Exception as e:
@@ -75,19 +82,22 @@ def main():
     # Carrega a tabela de medição e o prazo original
     tabela_medicao_dados = projeto_data.get("tabela_medicao", [])
     prazo_meses_original = int(projeto_data.get("prazo_meses", 12))
-    medicao_atual = int(projeto_data.get("medicao_atual", 12))
+    medicao_atual = int(projeto_data.get("medicao_atual", 1))
     
     if not tabela_medicao_dados:
         st.error("Este projeto não possui uma tabela de medição para editar.")
         st.stop()
 
     df = pd.DataFrame(tabela_medicao_dados)
+    # Remove a linha de total antes de editar para não ser alterada pelo usuário
+    df = df[df['Item'] != 'Total por Mês']
+
 
     # --- ALTERAÇÃO 1: CAMPO PARA INFORMAR MÊS ATUAL E LIDAR COM ATRASOS ---
     mes_medicao_atual = st.number_input(
         "Informe o mês da medição a ser atualizada:",
         min_value=1,
-        value=medicao_atual, # O valor padrão é o prazo atual do projeto
+        value=medicao_atual, 
         step=1,
         help="Se o mês informado for maior que o prazo atual, a tabela será expandida."
     )
@@ -127,23 +137,46 @@ def main():
     if st.button("✔️ Salvar Alterações na Medição"):
         with st.spinner("Calculando e salvando..."):
             try:
-                colunas_meses = [col for col in df_editado.columns if col.startswith('Mês ')]
-                for col in colunas_meses:
-                    df_editado[col] = pd.to_numeric(df_editado[col], errors='coerce').fillna(0)
+                # Faz uma cópia para evitar alterar o dataframe em exibição diretamente
+                df_para_salvar = df_editado.copy()
                 
-                df_editado['Total por etapa'] = pd.to_numeric(df_editado['Total por etapa'], errors='coerce').fillna(0)
-                df_editado['Total'] = df_editado[colunas_meses].sum(axis=1)
-                df_editado['Percentual do total da etapa'] = df_editado.apply(
+                # --- RECALCULA TOTAIS DAS LINHAS ---
+                colunas_meses = [col for col in df_para_salvar.columns if col.startswith('Mês ')]
+                for col in colunas_meses:
+                    df_para_salvar[col] = pd.to_numeric(df_para_salvar[col], errors='coerce').fillna(0)
+                
+                df_para_salvar['Total por etapa'] = pd.to_numeric(df_para_salvar['Total por etapa'], errors='coerce').fillna(0)
+                df_para_salvar['Total'] = df_para_salvar[colunas_meses].sum(axis=1)
+                df_para_salvar['Percentual do total da etapa'] = df_para_salvar.apply(
                     lambda row: f"{(row['Total'] / row['Total por etapa'] * 100):.2f}%" if row['Total por etapa'] > 0 else "0.00%",
                     axis=1
                 )
 
-                tabela_medicao_atualizada = df_editado.fillna("").to_dict(orient='records')
+                # --- NOVO: ADICIONA A LINHA DE TOTAIS POR MÊS ---
+                somas_colunas = df_para_salvar[colunas_meses + ['Total por etapa', 'Total']].sum()
+                linha_total = pd.DataFrame([somas_colunas], columns=somas_colunas.index)
+                linha_total['Item'] = 'Total por Mês'
                 
-                # --- ALTERAÇÃO 2: ATUALIZA O PRAZO DO PROJETO SE NECESSÁRIO ---
+                # Calcula o percentual geral
+                total_geral_etapa = linha_total['Total por etapa'].iloc[0]
+                total_geral_medido = linha_total['Total'].iloc[0]
+                if total_geral_etapa > 0:
+                    percentual_geral = (total_geral_medido / total_geral_etapa * 100)
+                    linha_total['Percentual do total da etapa'] = f"{percentual_geral:.2f}%"
+                else:
+                    linha_total['Percentual do total da etapa'] = "0.00%"
+                
+                # Concatena a linha de totais ao final do DataFrame
+                df_final = pd.concat([df_para_salvar, linha_total], ignore_index=True)
+                
+                # --- FIM DO NOVO CÓDIGO ---
+
+                tabela_medicao_atualizada = df_final.fillna("").to_dict(orient='records')
+                
+                # ATUALIZA O PRAZO E O MÊS ATUAL DO PROJETO SE NECESSÁRIO
                 dados_para_atualizar = {
                     "tabela_medicao": tabela_medicao_atualizada,
-                    "medicao_atual": medicao_atual + 1
+                    "medicao_atual": int(mes_medicao_atual)
                 }
                 if mes_medicao_atual > prazo_meses_original:
                     dados_para_atualizar["prazo_meses"] = mes_medicao_atual
@@ -151,8 +184,8 @@ def main():
                 db.collection("projetos").document(projeto_id).update(dados_para_atualizar)
                 
                 st.success("Tabela de medição atualizada com sucesso!")
-                st.write("Dados atualizados:")
-                st.dataframe(df_editado)
+                st.write("Dados atualizados (com totais por mês):")
+                st.dataframe(df_final)
 
             except Exception as e:
                 st.error(f"Ocorreu um erro ao salvar as alterações: {e}")
