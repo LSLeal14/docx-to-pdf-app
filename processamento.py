@@ -9,6 +9,7 @@ def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFra
     em relação ao valor total do projeto e retorna um DataFrame formatado.
     """
     try:
+        # 1. Buscar no documento do projeto no Firestore 
         doc_ref = db.collection("projetos").document(project_id)
         doc = doc_ref.get()
 
@@ -17,6 +18,8 @@ def gerar_tabela_percentual(db: firestore.client, project_id: str) -> pd.DataFra
             return None
 
         project_data = doc.to_dict()
+
+        # 2. Extrai dados 
         tabela_dados = project_data.get("table", [])
 
         if not tabela_dados:
@@ -54,9 +57,10 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
         pd.DataFrame: DataFrame consolidado com a análise acumulada, ou None em caso de erro.
     """
     try:
-        # 1. Buscar o documento único do projeto no Firestore
+        # 1. Buscar o documento do projeto no Firestore
         doc_ref = db.collection("projetos").document(project_id)
         doc = doc_ref.get()
+
         if not doc.exists:
             st.error(f"Erro: Projeto com ID '{project_id}' não foi encontrado.")
             return None
@@ -115,4 +119,27 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao gerar a tabela cumulativa: {e}")
         return None
+    
+def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -> pd.DataFrame:
+    """
+        
+        
+    """
+    try:
+        # 1. Buscar o documento único do projeto no Firestore
+        doc_ref = db.collection("projetos").document(project_id)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            st.error(f"Erro: Projeto com ID '{project_id}' não foi encontrado.")
+            return None
+        
+        project_data = doc.to_dict()
+
+        # 2. Extrai dados do projeto
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao gerar a tabela cumulativa: {e}")
+        return None
+
 
