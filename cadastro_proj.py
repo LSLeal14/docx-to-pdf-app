@@ -121,7 +121,7 @@ def main():
 
             # 2. Adiciona as colunas de meses, mas vazias, pois serão preenchidas no futuro
             for col in colunas_meses_existentes:
-                df_medicao[col] = ""
+                df_medicao[col] = 0
 
             # 3. Adiciona a coluna 'Total' inicializada com 0
             df_medicao['Total'] = 0.0
