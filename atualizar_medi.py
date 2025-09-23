@@ -84,6 +84,7 @@ def main():
     df = pd.DataFrame(tabela_medicao_dados)
     # Remove a linha de total antes de editar para não ser alterada pelo usuário
     df = df[df['Item'] != 'Total por Mês']
+    df = df[df['Item'] != 'TOTAL']
 
 
     # --- ALTERAÇÃO 1: CAMPO PARA INFORMAR MÊS ATUAL E LIDAR COM ATRASOS ---
