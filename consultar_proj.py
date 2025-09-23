@@ -14,7 +14,7 @@ from docx.shared import Inches
 # --- IMPORTAÇÃO DA NOVA FUNÇÃO ---
 # Certifique-se de que o arquivo com a função abaixo se chama 'processamento.py'
 # e está na mesma pasta que este script.
-from processamento import gerar_tabela_percentual, gerar_tabela_previsto_realizado
+from processamento import gerar_tabela_percentual, gerar_tabela_previsto_realizado, gerar_tabela_previsto_realizado_mes
 
 # ==== Funções auxiliares ====
 def get_downloads_folder():
@@ -213,7 +213,13 @@ def main():
                         tabela_2_df = gerar_tabela_previsto_realizado(db, doc_id)
                         
                         if tabela_2_df is None:
-                            st.error("Falha ao gerar a tabela de de comparativo.")
+                            st.error("Falha ao gerar a tabela de comparativo.")
+                            continue
+
+                        tabela_3_df = gerar_tabela_previsto_realizado_mes(db, doc_id)
+                        
+                        if tabela_3_df is None:
+                            st.error("Falha ao gerar a tabela de mês a mês.")
                             continue
 
                         # 2. Adiciona a tabela ao dicionário de dados
@@ -221,6 +227,7 @@ def main():
                         # A chave 'Tabela 1' deve corresponder ao placeholder {{Tabela 1}} no Word
                         dados_para_template['table'] = tabela_1_df
                         dados_para_template['table_2'] = tabela_2_df
+                        dados_para_template['table_3'] = tabela_3_df
                         
                         # Copia o template para um local temporário
                         caminho_template = "template/Template_ata_ebserh.docx"
