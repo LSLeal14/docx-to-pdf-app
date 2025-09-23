@@ -123,9 +123,6 @@ def main():
             for col in colunas_meses_existentes:
                 df_medicao[col] = 0
 
-            # 3. Adiciona a coluna 'Total' inicializada com 0
-            df_medicao['Total'] = 0.0
-
             # 4. Adiciona a coluna 'Percentual do total da etapa' inicializada com '0.00%'
             df_medicao['Percentual do total da etapa'] = '0.00%'
 

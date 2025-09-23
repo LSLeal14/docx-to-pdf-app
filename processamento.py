@@ -154,7 +154,9 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
         df_medicao = pd.DataFrame(medicao_data)
 
         total_planejamento_row = df_planejamento[df_planejamento['Item'] == 'TOTAL']
-        total_medicao_row = df_medicao[df_medicao['Item'] == 'TOTAL']
+        total_medicao_row = df_medicao[df_medicao['Item'] == 'Total por Mês']
+
+        st.table(total_medicao_row)
 
         if total_planejamento_row.empty or total_medicao_row.empty:
             st.warning("Linha de totais não encontrada nas tabelas de planejamento ou medição.")
@@ -173,6 +175,9 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
             # Coletar os valores do mês, tratando valores não numéricos
             total_previsto = pd.to_numeric(total_planejamento_row[mes_col], errors='coerce').fillna(0).iloc[0]
             total_realizado = pd.to_numeric(total_medicao_row[mes_col], errors='coerce').fillna(0).iloc[0]
+
+            st.write(total_previsto)
+            st.write(total_realizado)
 
             # Calcular os percentuais em relação ao valor total do projeto
             percentual_previsto = (total_previsto / valor_total_projeto) * 100 
