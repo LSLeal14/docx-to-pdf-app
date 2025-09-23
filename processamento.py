@@ -71,7 +71,10 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
         planejamento_data = project_data.get("table", [])
         medicao_data = project_data.get("tabela_medicao", [])
         medicao_atual = project_data.get("medicao_atual")
-        medicao_atual = medicao_atual - 1
+        if medicao_atual == 1:
+            medicao_atual = medicao_atual
+        else:
+            medicao_atual = medicao_atual - 1
 
         if not planejamento_data or not medicao_data:
             st.warning("Tabela de planejamento ou medição não encontrada ou vazia no documento do projeto.")
