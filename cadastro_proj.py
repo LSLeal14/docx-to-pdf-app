@@ -72,7 +72,7 @@ def main():
         edited_df = st.data_editor(
             df_inicial,
             num_rows="dynamic",
-            width=True,
+            width='stretch',
             height=250,
             hide_index=True,
             column_order=colunas_tabela
