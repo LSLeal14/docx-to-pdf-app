@@ -71,10 +71,6 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
         planejamento_data = project_data.get("table", [])
         medicao_data = project_data.get("tabela_medicao", [])
         medicao_atual = project_data.get("medicao_atual")
-        if medicao_atual == 1:
-            medicao_atual = medicao_atual
-        else:
-            medicao_atual = medicao_atual - 1
 
         if not planejamento_data or not medicao_data:
             st.warning("Tabela de planejamento ou medição não encontrada ou vazia no documento do projeto.")
@@ -125,11 +121,17 @@ def gerar_tabela_previsto_realizado(db: firestore.client, project_id: str) -> pd
     
 def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -> pd.DataFrame:
     """
-        
-        
+    Gera uma tabela comparativa mês a mês entre o planejamento e a medição, usando a linha de totais.
+
+    Args:
+        db (firestore.client): O cliente do Firestore já inicializado.
+        project_id (str): O ID do documento do projeto a ser processado.
+
+    Returns:
+        pd.DataFrame: DataFrame consolidado com a análise mês a mês, ou None em caso de erro.
     """
     try:
-        # 1. Buscar o documento único do projeto no Firestore
+        # 1. Buscar o documento do projeto no Firestore
         doc_ref = db.collection("projetos").document(project_id)
         doc = doc_ref.get()
 
@@ -138,12 +140,11 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
             return None
         
         project_data = doc.to_dict()
-
-        # 2. Extrai dados do projeto
+        
+        # 2. Extrair dados de PLANEJAMENTO e MEDIÇÃO do mesmo documento
         planejamento_data = project_data.get("table", [])
         medicao_data = project_data.get("tabela_medicao", [])
         medicao_atual = project_data.get("medicao_atual")
-        medicao_atual = medicao_atual - 1
 
         if not planejamento_data or not medicao_data:
             st.warning("Tabela de planejamento ou medição não encontrada ou vazia no documento do projeto.")
@@ -152,18 +153,52 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
         df_planejamento = pd.DataFrame(planejamento_data)
         df_medicao = pd.DataFrame(medicao_data)
 
-        # 3. Logica 
+        total_planejamento_row = df_planejamento[df_planejamento['Item'] == 'TOTAL']
+        total_medicao_row = df_medicao[df_medicao['Item'] == 'TOTAL']
 
-        totais_planejamento = df_planejamento.iloc("Total")
-        totais_medicao = df_medicao.iloc("Total")
+        if total_planejamento_row.empty or total_medicao_row.empty:
+            st.warning("Linha de totais não encontrada nas tabelas de planejamento ou medição.")
+            return pd.DataFrame()
+        
+        # Calcular o valor total do projeto para os percentuais
+        valor_total_projeto = pd.to_numeric(total_planejamento_row['Total por etapa'], errors='coerce').sum()
 
-        print(totais_medicao)
-        print(totais_planejamento)
-    
+        # 4. Preparar a tabela final
+        tabela_final = []
+        
+        # 5. Iterar por cada mês e calcular os totais e percentuais
+        for i in range(1, medicao_atual):
+            mes_col = f"Mês {i}"
 
+            # Coletar os valores do mês, tratando valores não numéricos
+            total_previsto = pd.to_numeric(total_planejamento_row[mes_col], errors='coerce').fillna(0).iloc[0]
+            total_realizado = pd.to_numeric(total_medicao_row[mes_col], errors='coerce').fillna(0).iloc[0]
 
+            # Calcular os percentuais em relação ao valor total do projeto
+            percentual_previsto = (total_previsto / valor_total_projeto) * 100 
+            percentual_realizado = (total_realizado / valor_total_projeto) * 100
+
+            # Calcular o desvio
+            total_desvio = total_realizado - total_previsto
+            percentual_desvio = percentual_realizado - percentual_previsto
+
+            # Adicionar os dados do mês à lista
+            tabela_final.append({
+                'Mês': i,
+                'Total Previsto': total_previsto,
+                'Percentual Previsto': f"{percentual_previsto:.2f}%",
+                'Total Realizado': total_realizado,
+                'Percentual Realizado': f"{percentual_realizado:.2f}%",
+                'Total Desvio': total_desvio,
+                'Percentual Desvio': f"{percentual_desvio:.2f}%"
+            })
+        
+        # 6. Criar o DataFrame final
+        df_final = pd.DataFrame(tabela_final)
+
+        return df_final
     except Exception as e:
-        st.error(f"Ocorreu um erro inesperado ao gerar a tabela cumulativa: {e}")
+        st.error(f"Ocorreu um erro inesperado ao gerar a tabela mês a mês: {e}")
         return None
 
 
