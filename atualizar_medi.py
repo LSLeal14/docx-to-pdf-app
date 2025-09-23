@@ -122,7 +122,7 @@ def main():
     # Exibe o editor da tabela (agora com as possíveis novas colunas)
     df_editado = st.data_editor(
         df,
-        use_container_width=True,
+        width=True,
         hide_index=True,
         disabled=['Item', 'Total por etapa', 'Total', 'Percentual do total da etapa']
     )
