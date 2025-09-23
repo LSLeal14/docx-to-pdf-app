@@ -167,7 +167,7 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
         tabela_final = []
         
         # 5. Iterar por cada mês e calcular os totais e percentuais
-        for i in range(1, medicao_atual):
+        for i in range(1, medicao_atual+1):
             mes_col = f"Mês {i}"
 
             # Coletar os valores do mês, tratando valores não numéricos
@@ -197,6 +197,7 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
         df_final = pd.DataFrame(tabela_final)
 
         return df_final
+    
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao gerar a tabela mês a mês: {e}")
         return None
