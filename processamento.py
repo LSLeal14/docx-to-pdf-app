@@ -195,9 +195,9 @@ def gerar_tabela_previsto_realizado_mes(db: firestore.client, project_id: str) -
             })
         
         # 6. Criar o DataFrame final
-        df_final = pd.DataFrame(tabela_final)
+        tabela_3 = pd.DataFrame(tabela_final)
 
-        return df_final
+        return tabela_3
     
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao gerar a tabela mês a mês: {e}")
@@ -272,6 +272,83 @@ def gerar_tabela_contratual(db: firestore.client, project_id: str) -> pd.DataFra
     
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao gerar a tabela contratual: {e}")
+        return None
+    
+def gerar_tabela_contratual_item(db: firestore.client, project_id: str) -> pd.DataFrame:
+    """
+    Gera uma tabela com valores de contrato, realizado, saldo contratual e percentuais por item.
+    """
+    try:
+        # 1. Buscar o documento do projeto no Firestore
+        doc_ref = db.collection("projetos").document(project_id)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            st.error(f"Erro: Projeto com ID '{project_id}' não foi encontrado.")
+            return None
+
+        project_data = doc.to_dict()
+
+        # 2. Extrair dados das tabelas de planejamento e medição
+        planejamento_data = project_data.get("table", [])
+        medicao_data = project_data.get("tabela_medicao", [])
+
+        if not planejamento_data or not medicao_data:
+            st.warning("Tabela de planejamento ou medição não encontrada ou vazia no documento do projeto.")
+            return pd.DataFrame()
+        
+        # 3. Criar DataFrames e remover as linhas de totais para trabalhar apenas com os itens
+        df_planejamento = pd.DataFrame(planejamento_data)
+        df_medicao = pd.DataFrame(medicao_data)
+        
+        df_planejamento = df_planejamento[df_planejamento['Item'] != 'TOTAL']
+        df_medicao = df_medicao[df_medicao['Item'] != 'Total por Mês']
+        df_medicao = df_medicao[df_medicao['Item'] != 'TOTAL']
+        
+        # 4. Mesclar os DataFrames com base no 'Item'
+        df_planejamento['Total por etapa'] = pd.to_numeric(df_planejamento['Total por etapa'], errors='coerce').fillna(0)
+        df_medicao['Total'] = pd.to_numeric(df_medicao['Total'], errors='coerce').fillna(0)
+
+        df_merged = pd.merge(df_planejamento[['Item', 'Total por etapa']],
+                             df_medicao[['Item', 'Total']],
+                             on='Item',
+                             how='left')
+        df_merged.rename(columns={'Total': 'Valor Realizado'}, inplace=True)
+        df_merged.fillna(0, inplace=True)
+
+        # 5. Fazer os cálculos solicitados
+        df_merged['Saldo Contratual'] = df_merged['Total por etapa'] - df_merged['Valor Realizado']
+        
+        # O percentual é calculado em relação ao Total por etapa do item
+        df_merged['Percentual Realizado'] = df_merged.apply(
+            lambda row: (row['Valor Realizado'] / row['Total por etapa']) * 100 if row['Total por etapa'] > 0 else 0,
+            axis=1
+        )
+        df_merged['Percentual Saldo'] = df_merged.apply(
+            lambda row: (row['Saldo Contratual'] / row['Total por etapa']) * 100 if row['Total por etapa'] > 0 else 0,
+            axis=1
+        )
+
+        # 6. Formatar as colunas de percentual
+        for col in ['Percentual Realizado', 'Percentual Saldo']:
+            df_merged[col] = df_merged[col].apply(lambda x: f"{x:.2f}%")
+
+        # 7. Organizar as colunas para o resultado final
+        tabela_5 = df_merged[[
+            'Item',
+            'Total por etapa',
+            'Valor Realizado',
+            'Percentual Realizado',
+            'Saldo Contratual',
+            'Percentual Saldo'
+        ]].copy()
+
+        st.table(tabela_5)
+        
+        return tabela_5
+    
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao gerar a tabela contratual por item: {e}")
         return None
 
 

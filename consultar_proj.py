@@ -10,7 +10,7 @@ from firebase_admin import credentials, firestore
 import pandas as pd
 from docx import Document
 from docx.shared import Inches, Pt
-from processamento import gerar_tabela_percentual, gerar_tabela_previsto_realizado, gerar_tabela_previsto_realizado_mes, gerar_tabela_contratual
+from processamento import gerar_tabela_percentual, gerar_tabela_previsto_realizado, gerar_tabela_previsto_realizado_mes, gerar_tabela_contratual, gerar_tabela_contratual_item
 
 
 def get_downloads_folder():
@@ -226,6 +226,12 @@ def main():
                             st.error("Falha ao gerar a tabela de saldo.")
                             continue
 
+                        tabela_4_df = gerar_tabela_contratual_item(db, doc_id)
+
+                        if tabela_5_df is None:
+                            st.error("Falha ao gerar a tabela de saldo.")
+                            continue
+
                         # 2. Adiciona a tabela ao dicionário de dados
                         dados_para_template = data.copy()
                         # A chave 'Tabela 1' deve corresponder ao placeholder {{Tabela 1}} no Word
@@ -233,6 +239,7 @@ def main():
                         dados_para_template['table_2'] = tabela_2_df
                         dados_para_template['table_3'] = tabela_3_df
                         dados_para_template['table_4'] = tabela_4_df
+                        dados_para_template['table_5'] = tabela_5_df
                         
                         # Copia o template para um local temporário
                         caminho_template = "template/Template_ata_ebserh.docx"
