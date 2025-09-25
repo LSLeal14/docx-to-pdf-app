@@ -273,4 +273,92 @@ def gerar_tabela_contratual(db: firestore.client, project_id: str) -> pd.DataFra
         st.error(f"Ocorreu um erro inesperado ao gerar a tabela contratual: {e}")
         return None
     
+def gerar_tabela_previsto_realizado_acumulado(db: firestore.client, project_id: str) -> pd.DataFrame:
+    """
+    Gera uma tabela comparativa acumulada entre o planejamento e a medição.
+
+    A função soma os valores de todas as colunas de "Mês 1" até o mês de medição atual
+    para obter os totais acumulados.
+
+    Args:
+        db (firestore.client): O cliente do Firestore já inicializado.
+        project_id (str): O ID do documento do projeto a ser processado.
+
+    Returns:
+        pd.DataFrame: DataFrame consolidado com a análise acumulada, ou None em caso de erro.
+    """
+    try:
+        # 1. Buscar o documento do projeto no Firestore
+        doc_ref = db.collection("projetos").document(project_id)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            st.error(f"Erro: Projeto com ID '{project_id}' não foi encontrado.")
+            return None
+        
+        project_data = doc.to_dict()
+        
+        # 2. Extrair dados de PLANEJAMENTO e MEDIÇÃO do mesmo documento
+        planejamento_data = project_data.get("table", [])
+        medicao_data = project_data.get("tabela_medicao", [])
+        medicao_atual = project_data.get("medicao_atual", 1)
+
+        if not planejamento_data or not medicao_data:
+            st.warning("Tabela de planejamento ou medição não encontrada ou vazia no documento do projeto.")
+            return pd.DataFrame()
+
+        df_planejamento = pd.DataFrame(planejamento_data)
+        df_medicao = pd.DataFrame(medicao_data)
+        
+        # Remove a linha de 'TOTAL' se existir
+        df_planejamento = df_planejamento[df_planejamento['Item'] != 'TOTAL']
+        df_medicao = df_medicao[df_medicao['Item'] != 'Total por Mês']
+        
+        # Garante que as colunas de meses são numéricas
+        colunas_meses = [f'Mês {i}' for i in range(1, medicao_atual + 1)]
+        
+        for col in colunas_meses:
+            if col not in df_planejamento.columns:
+                df_planejamento[col] = 0
+            if col not in df_medicao.columns:
+                df_medicao[col] = 0
+            
+            df_planejamento[col] = pd.to_numeric(df_planejamento[col], errors='coerce').fillna(0)
+            df_medicao[col] = pd.to_numeric(df_medicao[col], errors='coerce').fillna(0)
+
+        # 3. Calcular os totais acumulados
+        df_planejamento['Valor Previsto Acumulado'] = df_planejamento[colunas_meses].sum(axis=1)
+        df_medicao['Valor Realizado Acumulado'] = df_medicao[colunas_meses].sum(axis=1)
+
+        # 4. Mesclar os DataFrames e realizar os cálculos finais
+        df_final = pd.merge(df_planejamento[['Item', 'Total por etapa', 'Valor Previsto Acumulado']],
+                             df_medicao[['Item', 'Valor Realizado Acumulado']],
+                             on='Item',
+                             how='left')
+        df_final.fillna(0, inplace=True)
+        df_final['Total por etapa'] = pd.to_numeric(df_final['Total por etapa'], errors='coerce').fillna(0)
+        
+        total_etapa = df_final['Total por etapa']
+        df_final['Percentual Previsto Acumulado'] = (df_final['Valor Previsto Acumulado'] / total_etapa).where(total_etapa != 0, 0) * 100
+        df_final['Percentual Realizado Acumulado'] = (df_final['Valor Realizado Acumulado'] / total_etapa).where(total_etapa != 0, 0) * 100
+        df_final['Desvio Percentual'] = df_final['Percentual Realizado Acumulado'] - df_final['Percentual Previsto Acumulado']
+
+        # 5. Formatar as colunas de percentual
+        for col in ['Percentual Previsto Acumulado', 'Percentual Realizado Acumulado', 'Desvio Percentual']:
+            df_final[col] = df_final[col].apply(lambda x: f"{x:.2f}%")
+        
+        # 6. Organizar as colunas para o resultado final
+        tabela_5 = df_final[[
+            'Item', 'Total por etapa', 
+            'Valor Previsto Acumulado', 'Percentual Previsto Acumulado', 
+            'Valor Realizado Acumulado', 'Percentual Realizado Acumulado', 
+            'Desvio Percentual'
+        ]].copy()
+
+        st.table(tabela_5)
+        return tabela_5
+    
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao gerar a tabela acumulada: {e}")
+        return None
 

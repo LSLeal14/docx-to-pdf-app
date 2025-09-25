@@ -10,7 +10,7 @@ from firebase_admin import credentials, firestore
 import pandas as pd
 from docx import Document
 from docx.shared import Inches, Pt
-from processamento import gerar_tabela_percentual, gerar_tabela_previsto_realizado, gerar_tabela_previsto_realizado_mes, gerar_tabela_contratual, gerar_tabela_contratual_item
+from processamento import gerar_tabela_percentual, gerar_tabela_previsto_realizado, gerar_tabela_previsto_realizado_mes, gerar_tabela_contratual, gerar_tabela_previsto_realizado_acumulado
 
 
 def get_downloads_folder():
@@ -226,7 +226,7 @@ def main():
                             st.error("Falha ao gerar a tabela de saldo.")
                             continue
 
-                        tabela_5_df = gerar_tabela_contratual_item(db, doc_id)
+                        tabela_5_df = gerar_tabela_previsto_realizado_acumulado(db, doc_id)
 
                         if tabela_5_df is None:
                             st.error("Falha ao gerar a tabela de saldo.")
