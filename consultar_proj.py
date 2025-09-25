@@ -226,7 +226,7 @@ def main():
                             st.error("Falha ao gerar a tabela de saldo.")
                             continue
 
-                        tabela_4_df = gerar_tabela_contratual_item(db, doc_id)
+                        tabela_5_df = gerar_tabela_contratual_item(db, doc_id)
 
                         if tabela_5_df is None:
                             st.error("Falha ao gerar a tabela de saldo.")
