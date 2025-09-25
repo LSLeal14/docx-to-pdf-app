@@ -9,7 +9,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
 from docx import Document
-from docx.shared import Inches
+from docx.shared import Inches, Pt
 
 # --- IMPORTAÇÃO DA NOVA FUNÇÃO ---
 # Certifique-se de que o arquivo com a função abaixo se chama 'processamento.py'
@@ -85,12 +85,14 @@ def preencher_campos(doc, dados):
         for j, c in enumerate(cols):
             run = hdr_cells[j].paragraphs[0].add_run(str(c))
             run.bold = True
+            run.font.size = Pt(10)
 
         for i, row_data in enumerate(records, start=1):
             row_cells = table.rows[i].cells
             for j, c in enumerate(cols):
                 cell_value = row_data.get(c)
-                row_cells[j].text = "" if cell_value is None else str(cell_value)
+                run = row_cells[j].paragraphs[0].add_run("" if cell_value is None else str(cell_value))
+                run.font.size = Pt(10)
                 
         p._element.addnext(table._element)
 
