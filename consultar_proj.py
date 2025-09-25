@@ -10,13 +10,9 @@ from firebase_admin import credentials, firestore
 import pandas as pd
 from docx import Document
 from docx.shared import Inches, Pt
-
-# --- IMPORTAÇÃO DA NOVA FUNÇÃO ---
-# Certifique-se de que o arquivo com a função abaixo se chama 'processamento.py'
-# e está na mesma pasta que este script.
 from processamento import gerar_tabela_percentual, gerar_tabela_previsto_realizado, gerar_tabela_previsto_realizado_mes, gerar_tabela_contratual
 
-# ==== Funções auxiliares ====
+
 def get_downloads_folder():
     """Retorna o caminho para a pasta de Downloads do usuário."""
     home = Path.home()
