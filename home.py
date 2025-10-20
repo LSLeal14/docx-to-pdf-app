@@ -21,7 +21,7 @@ def main():
 
     st.header("Passo a passo para uso da plataforma")
     st.subheader("1. Navegação")
-    st.image("img/Screenshot from 2025-10-20 09-22-27.png", width=1000)
+    st.image("img/Screenshot from 2025-10-20 10-05-52.png", width=1000)
 
     st.text("A navegação pela pagina é realizada atravez do menu retratil a esquerda, a partir dele as demais paginas podem ser acessadas. No canto supeior esquerdo o menu de configurações. Ao centro o guia de uso do site.")
 
